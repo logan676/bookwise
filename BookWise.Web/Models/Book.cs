@@ -24,6 +24,11 @@ public class Book
     [MaxLength(100)]
     public string? Category { get; set; }
 
+    [MaxLength(20)]
+    public string? ISBN { get; set; }
+
+    public string Status { get; set; } = "plan-to-read"; // plan-to-read, reading, read
+
     public bool IsFavorite { get; set; }
 
     [Range(0, 5)]
