@@ -1,0 +1,106 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "My Books";
+}
+
+<section class="search-area">
+    <label class="search-bar" for="search-input">
+        <span class="sr-only">Search for a book</span>
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.71.71l.27.28v.79l5 5 1.5-1.5-5-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z" />
+        </svg>
+        <input id="search-input" type="search" name="query" placeholder="Search for a book by title or author..." autocomplete="off" />
+        <button id="search-button" type="button" class="primary-button">Search</button>
+    </label>
+</section>
+
+<section id="empty-state" class="empty-state" aria-live="polite">
+    <div class="empty-card">
+        <div class="empty-icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+                <path d="M10 16C10 12.6863 12.6863 10 16 10H32C35.3137 10 38 12.6863 38 16V52C38 55.3137 35.3137 58 32 58H16C12.6863 58 10 55.3137 10 52V16Z" fill="#E2F2FF"/>
+                <path d="M54 16C54 12.6863 51.3137 10 48 10H32C28.6863 10 26 12.6863 26 16V52C26 55.3137 28.6863 58 32 58H48C51.3137 58 54 55.3137 54 52V16Z" fill="#B8E0FF"/>
+                <path d="M21 24H30" stroke="#0D6EFD" stroke-width="3" stroke-linecap="round"/>
+                <path d="M21 34H30" stroke="#0D6EFD" stroke-width="3" stroke-linecap="round"/>
+                <path d="M34 24H43" stroke="#0D6EFD" stroke-width="3" stroke-linecap="round"/>
+                <path d="M34 34H43" stroke="#0D6EFD" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <h2>Add a new book to your library</h2>
+        <p>Start by searching for a book by its title or author in the search bar above. We'll find it for you!</p>
+        <button id="start-searching" type="button" class="primary-button">Start Searching</button>
+    </div>
+</section>
+
+<section id="results-section" class="results" hidden>
+    <header class="results-header">
+        <div>
+            <h2 id="results-title">My Books</h2>
+            <p id="results-subtitle">Displaying your saved books</p>
+        </div>
+        <div class="results-actions">
+            <button id="open-add-form" type="button" class="ghost-button">Add new book</button>
+            <label class="toggle">
+                <input id="favorite-filter" type="checkbox" />
+                <span>Show favorites only</span>
+            </label>
+        </div>
+    </header>
+    <div id="results-list" class="books-grid" role="list"></div>
+    <p id="no-results" class="no-results" hidden></p>
+</section>
+
+<section id="add-book-section" class="add-book-panel" hidden>
+    <div class="panel-header">
+        <h3>Add a new book</h3>
+        <button id="close-add-form" type="button" class="ghost-button" aria-label="Close add book form">Close</button>
+    </div>
+    <form id="add-book-form" novalidate>
+        <div class="form-row">
+            <label for="book-title">Title</label>
+            <input id="book-title" name="title" type="text" maxlength="200" required />
+        </div>
+        <div class="form-row">
+            <label for="book-author">Author</label>
+            <input id="book-author" name="author" type="text" maxlength="200" required />
+        </div>
+        <div class="form-row">
+            <label for="book-category">Category</label>
+            <input id="book-category" name="category" type="text" maxlength="100" />
+        </div>
+        <div class="form-row">
+            <label for="book-description">Description</label>
+            <textarea id="book-description" name="description" rows="3" maxlength="2000"></textarea>
+        </div>
+        <div class="form-row split">
+            <div>
+                <label for="book-cover">Cover image URL</label>
+                <input id="book-cover" name="coverImageUrl" type="url" maxlength="500" placeholder="https://" />
+            </div>
+            <div>
+                <label for="book-rating">Rating</label>
+                <input id="book-rating" name="rating" type="number" min="0" max="5" step="0.1" />
+            </div>
+        </div>
+        <div class="form-row checkbox">
+            <input id="book-favorite" name="isFavorite" type="checkbox" />
+            <label for="book-favorite">Mark as favorite</label>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="primary-button">Save Book</button>
+            <button id="cancel-add" type="button" class="ghost-button">Cancel</button>
+        </div>
+        <p id="form-error" class="form-error" role="alert" hidden></p>
+    </form>
+</section>
+
+@section Scripts {
+    <script>
+        window.bookWiseSettings = {
+            endpoints: {
+                books: '/api/books'
+            }
+        };
+    </script>
+}

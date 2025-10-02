@@ -1,0 +1,32 @@
+# Build outputs
+bin/
+obj/
+**/bin/
+**/obj/
+
+# User-specific files
+*.user
+*.suo
+*.userprefs
+*.rsuser
+*.sln.docstates
+
+# IDE settings
+.vs/
+.idea/
+*.csproj.user
+
+# Logs and temp
+*.log
+*.tmp
+~*
+
+# SQLite local database
+BookWise.Web/Data/bookwise.db*
+
+# Coverage
+coverage/
+
+# OS generated files
+.DS_Store
+Thumbs.db

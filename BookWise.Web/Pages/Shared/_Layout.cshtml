@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - BookWise</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script src="~/js/site.js" asp-append-version="true" defer></script>
+</head>
+<body>
+    <div class="app-shell">
+        <header class="top-nav">
+            <div class="nav-left">
+                <a class="brand" asp-area="" asp-page="/Index">
+                    <span class="brand-icon" aria-hidden="true">
+                        <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 8.5C4 7.11929 5.11929 6 6.5 6H15.25C16.2165 6 17 6.7835 17 7.75V25.25C17 26.2165 16.2165 27 15.25 27H6.5C5.11929 27 4 25.8807 4 24.5V8.5Z" fill="#0D6EFD"/>
+                            <path d="M28 8.5C28 7.11929 26.8807 6 25.5 6H16.75C15.7835 6 15 6.7835 15 7.75V25.25C15 26.2165 15.7835 27 16.75 27H25.5C26.8807 27 28 25.8807 28 24.5V8.5Z" fill="#1EA7FD"/>
+                            <path d="M8 12H13" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M8 17H13" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M19 12H24" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M19 17H24" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <span class="brand-name">BookWise</span>
+                </a>
+                <nav class="nav-links" aria-label="Primary">
+                    <a class="nav-link" asp-page="/Index">My Books</a>
+                    <a class="nav-link" href="#" data-disabled="true">Explore</a>
+                    <a class="nav-link" href="#" data-disabled="true">Recommendations</a>
+                </nav>
+            </div>
+            <div class="nav-right">
+                <button class="profile-button" type="button" aria-label="Open profile menu">
+                    <img src="https://i.pravatar.cc/48?img=47" alt="Profile avatar" />
+                </button>
+            </div>
+        </header>
+        <main class="main-content" role="main">
+            @RenderBody()
+        </main>
+    </div>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
