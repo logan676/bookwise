@@ -19,6 +19,8 @@ namespace BookWise.Web.Pages
         public int AlreadyReadBooks { get; set; }
         public int PlanToReadBooks { get; set; }
         public List<GenreStatistic> GenreStats { get; set; } = new List<GenreStatistic>();
+        public double CompletionRate { get; private set; }
+        public string TopGenre { get; private set; } = "None";
 
         public async Task OnGetAsync()
         {
@@ -43,6 +45,9 @@ namespace BookWise.Web.Pages
                 })
                 .OrderByDescending(g => g.Count)
                 .ToList();
+
+            TopGenre = GenreStats.FirstOrDefault()?.Genre ?? "None";
+            CompletionRate = TotalBooks == 0 ? 0 : Math.Round((double)AlreadyReadBooks / TotalBooks * 100, 1);
         }
     }
 
