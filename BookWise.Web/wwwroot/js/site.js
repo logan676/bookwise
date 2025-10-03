@@ -391,27 +391,36 @@
         (currentPath === "/Index" && linkPath === "/Index") ||
         (currentPath === "/Explore" && linkPath === "/Explore") ||
         (currentPath === "/Statistics" && linkPath === "/Statistics") ||
+        (currentPath === "/Recommendations" &&
+          linkPath === "/Recommendations") ||
+        (currentPath === "/Profile" && linkPath === "/Profile") ||
         (currentPath === "/Settings" && linkPath === "/Settings")
       ) {
         link.classList.add("active");
       }
     });
 
-    const settingsLink = document.querySelector(
-      '.settings-menu-item[href="/Settings"]'
-    );
-    if (currentPath === "/Settings" && settingsLink) {
-      settingsLink.classList.add("active");
-    }
+    const userMenuItems = document.querySelectorAll(".user-menu-item");
+    userMenuItems.forEach((item) => {
+      const itemPath =
+        item.getAttribute("href") || item.getAttribute("asp-page");
+      if (
+        itemPath === currentPath ||
+        (currentPath === "/Profile" && itemPath === "/Profile") ||
+        (currentPath === "/Settings" && itemPath === "/Settings")
+      ) {
+        item.classList.add("active");
+      }
+    });
   }
 
-  function initSettingsMenu() {
-    const menu = document.querySelector(".settings-menu");
+  function initUserMenu() {
+    const menu = document.querySelector(".user-menu");
     if (!menu) {
       return;
     }
 
-    const toggle = menu.querySelector(".settings-toggle");
+    const toggle = menu.querySelector(".user-menu-toggle");
     const updateAriaExpanded = () => {
       if (!toggle) {
         return;
@@ -446,6 +455,6 @@
   document.addEventListener("DOMContentLoaded", () => {
     init();
     initNavigation();
-    initSettingsMenu();
+    initUserMenu();
   });
 })();

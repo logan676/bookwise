@@ -27,6 +27,15 @@
                 data-explore-tab="quotes">
             Quotes
         </button>
+        <button type="button"
+                class="explore-top-tab"
+                id="explore-tab-recommendations"
+                role="tab"
+                aria-controls="explore-pane-recommendations"
+                aria-selected="false"
+                data-explore-tab="recommendations">
+            Recommendations
+        </button>
     </div>
 
     <div class="explore-top-panels">
@@ -203,6 +212,84 @@
                 </section>
             </div>
         </section>
+
+        <section id="explore-pane-recommendations"
+                 class="explore-top-panel"
+                 role="tabpanel"
+                 aria-labelledby="explore-tab-recommendations"
+                 data-explore-tab="recommendations"
+                 hidden>
+            <div class="recommendations-content">
+                <header class="recommendations-intro">
+                    <p class="recommendations-kicker">Curated For You</p>
+                    <h1 class="recommendations-title">Discover what to read and watch next</h1>
+                    <p class="recommendations-subtitle">New voices, epic sagas, and screen adaptations inspired by your shelf.</p>
+                </header>
+
+                <section class="recommendations-section">
+                    <div class="recommendations-section-header">
+                        <h2>Discover New Authors</h2>
+                        <p>Fresh storytellers aligned with your recent reads.</p>
+                    </div>
+                    <div class="recommendation-grid recommendation-grid--authors">
+                        @foreach (var author in Model.RecommendedAuthors)
+                        {
+                            <article class="recommendation-card recommendation-card--author">
+                                <div class="recommendation-card-media">
+                                    <img src="@author.ImageUrl" alt="@author.Name" loading="lazy" />
+                                </div>
+                                <div class="recommendation-card-body">
+                                    <h3>@author.Name</h3>
+                                    <p>@author.Description</p>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </section>
+
+                <section class="recommendations-section">
+                    <div class="recommendations-section-header">
+                        <h2>Book Series On Your Radar</h2>
+                        <p>Pick up the next installment before it leaves the spotlight.</p>
+                    </div>
+                    <div class="recommendation-grid recommendation-grid--series">
+                        @foreach (var series in Model.RecommendedSeries)
+                        {
+                            <article class="recommendation-card recommendation-card--series">
+                                <div class="recommendation-card-media">
+                                    <img src="@series.CoverUrl" alt="@series.Title @series.Installment" loading="lazy" />
+                                </div>
+                                <div class="recommendation-card-body">
+                                    <h3>@series.Title</h3>
+                                    <p>@series.Installment</p>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </section>
+
+                <section class="recommendations-section">
+                    <div class="recommendations-section-header">
+                        <h2>Screen Adaptations</h2>
+                        <p>Binge-worthy picks based on beloved reads.</p>
+                    </div>
+                    <div class="recommendation-grid recommendation-grid--adaptations">
+                        @foreach (var adaptation in Model.RecommendedAdaptations)
+                        {
+                            <article class="recommendation-card recommendation-card--adaptation">
+                                <div class="recommendation-card-media">
+                                    <img src="@adaptation.ImageUrl" alt="@adaptation.Title poster" loading="lazy" />
+                                    <span class="recommendation-tag">@adaptation.Type</span>
+                                </div>
+                                <div class="recommendation-card-body">
+                                    <h3>@adaptation.Title</h3>
+                                </div>
+                            </article>
+                        }
+                    </div>
+                </section>
+            </div>
+        </section>
     </div>
 </div>
 
@@ -249,25 +336,30 @@
             const authorButtons = Array.from(document.querySelectorAll('.author-button'));
             const panes = Array.from(document.querySelectorAll('.author-details-pane'));
 
-            if (!authorButtons.length || !panes.length) {
-                return;
-            }
+            if (authorButtons.length && panes.length) {
+                authorButtons.forEach((button) => {
+                    button.addEventListener('click', () => {
+                        const target = button.dataset.author;
 
-            authorButtons.forEach((button) => {
-                button.addEventListener('click', () => {
-                    const target = button.dataset.author;
+                        authorButtons.forEach((btn) => {
+                            const isCurrent = btn === button;
+                            btn.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
+                            btn.parentElement?.classList.toggle('is-active', isCurrent);
+                        });
 
-                    authorButtons.forEach((btn) => {
-                        const isCurrent = btn === button;
-                        btn.setAttribute('aria-selected', isCurrent ? 'true' : 'false');
-                        btn.parentElement?.classList.toggle('is-active', isCurrent);
-                    });
-
-                    panes.forEach((pane) => {
-                        pane.classList.toggle('is-active', pane.dataset.author === target);
+                        panes.forEach((pane) => {
+                            pane.classList.toggle('is-active', pane.dataset.author === target);
+                        });
                     });
                 });
-            });
+            }
+
+            const recommendationCards = document.querySelectorAll('.recommendation-card');
+            if (recommendationCards.length) {
+                recommendationCards.forEach((card, index) => {
+                    card.style.setProperty('--enter-delay', `${index * 60}ms`);
+                });
+            }
         });
     </script>
 }

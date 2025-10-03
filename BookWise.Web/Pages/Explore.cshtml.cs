@@ -8,12 +8,16 @@ namespace BookWise.Web.Pages
         public IReadOnlyList<AuthorProfile> Authors { get; private set; } = new List<AuthorProfile>();
         public QuoteCard QuoteOfTheDay { get; private set; } = QuoteCard.Empty;
         public IReadOnlyList<QuoteCard> Quotes { get; private set; } = new List<QuoteCard>();
+        public IReadOnlyList<RecommendedAuthor> RecommendedAuthors { get; private set; } = new List<RecommendedAuthor>();
+        public IReadOnlyList<RecommendedSeries> RecommendedSeries { get; private set; } = new List<RecommendedSeries>();
+        public IReadOnlyList<RecommendedAdaptation> RecommendedAdaptations { get; private set; } = new List<RecommendedAdaptation>();
 
         public void OnGet()
         {
             ViewData["Title"] = "Explore";
             Authors = BuildAuthors();
             (QuoteOfTheDay, Quotes) = BuildQuotes();
+            (RecommendedAuthors, RecommendedSeries, RecommendedAdaptations) = BuildRecommendations();
         }
 
         private static IReadOnlyList<AuthorProfile> BuildAuthors()
@@ -201,6 +205,95 @@ namespace BookWise.Web.Pages
             return (quoteOfTheDay, quotes);
         }
 
+        private static (IReadOnlyList<RecommendedAuthor> Authors, IReadOnlyList<RecommendedSeries> Series, IReadOnlyList<RecommendedAdaptation> Adaptations) BuildRecommendations()
+        {
+            var authors = new List<RecommendedAuthor>
+            {
+                new()
+                {
+                    Name = "Jane Doe",
+                    Description = "Master of historical fiction with a modern twist.",
+                    ImageUrl = "https://i.pravatar.cc/150?img=1"
+                },
+                new()
+                {
+                    Name = "John Smith",
+                    Description = "Award-winning author of gripping sci-fi thrillers.",
+                    ImageUrl = "https://i.pravatar.cc/150?img=2"
+                },
+                new()
+                {
+                    Name = "Emily White",
+                    Description = "Bestselling writer of cozy mysteries and heartwarming tales.",
+                    ImageUrl = "https://i.pravatar.cc/150?img=3"
+                }
+            };
+
+            var series = new List<RecommendedSeries>
+            {
+                new()
+                {
+                    Title = "The Sunstone Saga",
+                    Installment = "Book 1",
+                    CoverUrl = "https://covers.openlibrary.org/b/id/8225261-L.jpg"
+                },
+                new()
+                {
+                    Title = "The Sunstone Saga",
+                    Installment = "Book 2",
+                    CoverUrl = "https://covers.openlibrary.org/b/id/12593687-L.jpg"
+                },
+                new()
+                {
+                    Title = "The Starfall Chronicles",
+                    Installment = "Book 1",
+                    CoverUrl = "https://covers.openlibrary.org/b/id/8091016-L.jpg"
+                },
+                new()
+                {
+                    Title = "The Starfall Chronicles",
+                    Installment = "Book 2",
+                    CoverUrl = "https://covers.openlibrary.org/b/id/8091017-L.jpg"
+                }
+            };
+
+            var adaptations = new List<RecommendedAdaptation>
+            {
+                new()
+                {
+                    Title = "Movie 1",
+                    Type = "Movie",
+                    ImageUrl = "https://picsum.photos/300/400?random=1"
+                },
+                new()
+                {
+                    Title = "TV Show 1",
+                    Type = "TV Show",
+                    ImageUrl = "https://picsum.photos/300/400?random=2"
+                },
+                new()
+                {
+                    Title = "Movie 2",
+                    Type = "Movie",
+                    ImageUrl = "https://picsum.photos/300/400?random=3"
+                },
+                new()
+                {
+                    Title = "TV Show 2",
+                    Type = "TV Show",
+                    ImageUrl = "https://picsum.photos/300/400?random=4"
+                },
+                new()
+                {
+                    Title = "Movie 3",
+                    Type = "Movie",
+                    ImageUrl = "https://picsum.photos/300/400?random=5"
+                }
+            };
+
+            return (authors, series, adaptations);
+        }
+
         private static string CoverById(int coverId) => $"https://covers.openlibrary.org/b/id/{coverId}-L.jpg";
 
         public class AuthorProfile
@@ -229,6 +322,27 @@ namespace BookWise.Web.Pages
             public string Author { get; init; } = string.Empty;
             public string? Source { get; init; }
             public string? BackgroundImageUrl { get; init; }
+        }
+
+        public class RecommendedAuthor
+        {
+            public string Name { get; init; } = string.Empty;
+            public string Description { get; init; } = string.Empty;
+            public string ImageUrl { get; init; } = string.Empty;
+        }
+
+        public class RecommendedSeries
+        {
+            public string Title { get; init; } = string.Empty;
+            public string Installment { get; init; } = string.Empty;
+            public string CoverUrl { get; init; } = string.Empty;
+        }
+
+        public class RecommendedAdaptation
+        {
+            public string Title { get; init; } = string.Empty;
+            public string Type { get; init; } = string.Empty;
+            public string ImageUrl { get; init; } = string.Empty;
         }
     }
 }

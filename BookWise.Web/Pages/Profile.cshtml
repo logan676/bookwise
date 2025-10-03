@@ -1,0 +1,127 @@
+@page
+@model BookWise.Web.Pages.ProfileModel
+@{
+    ViewData["Title"] = "Profile";
+}
+
+<div class="profile-page">
+    <div class="profile-container">
+        <div class="profile-header">
+            <div class="profile-avatar-large">
+                <img src="https://i.pravatar.cc/120?img=47" alt="User Profile" />
+            </div>
+            <div class="profile-info">
+                <h1 class="profile-name">Sophia's Library</h1>
+                <p class="profile-email">sophia@example.com</p>
+                <p class="profile-joined">Member since January 2023</p>
+            </div>
+        </div>
+
+        <div class="profile-content">
+            <div class="profile-stats">
+                <div class="stat-card">
+                    <div class="stat-number">52</div>
+                    <div class="stat-label">Total Books</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">23</div>
+                    <div class="stat-label">Books Read</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">15</div>
+                    <div class="stat-label">Currently Reading</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">14</div>
+                    <div class="stat-label">Want to Read</div>
+                </div>
+            </div>
+
+            <div class="profile-sections">
+                <div class="profile-section">
+                    <h2 class="section-title">Reading Goals</h2>
+                    <div class="reading-goal">
+                        <div class="goal-header">
+                            <h3>2024 Reading Challenge</h3>
+                            <span class="goal-progress">23 of 50 books</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 46%"></div>
+                        </div>
+                        <p class="goal-text">You're 46% of the way to your goal!</p>
+                    </div>
+                </div>
+
+                <div class="profile-section">
+                    <h2 class="section-title">Favorite Genres</h2>
+                    <div class="genre-tags">
+                        <span class="genre-tag">Science Fiction</span>
+                        <span class="genre-tag">Mystery</span>
+                        <span class="genre-tag">Biography</span>
+                        <span class="genre-tag">History</span>
+                        <span class="genre-tag">Self-Help</span>
+                    </div>
+                </div>
+
+                <div class="profile-section">
+                    <h2 class="section-title">Recent Activity</h2>
+                    <div class="activity-list">
+                        <div class="activity-item">
+                            <div class="activity-icon">📚</div>
+                            <div class="activity-text">
+                                <span class="activity-action">Started reading</span>
+                                <span class="activity-book">"The Seven Husbands of Evelyn Hugo"</span>
+                                <span class="activity-time">2 days ago</span>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon">✅</div>
+                            <div class="activity-text">
+                                <span class="activity-action">Finished reading</span>
+                                <span class="activity-book">"Atomic Habits"</span>
+                                <span class="activity-time">1 week ago</span>
+                            </div>
+                        </div>
+                        <div class="activity-item">
+                            <div class="activity-icon">⭐</div>
+                            <div class="activity-text">
+                                <span class="activity-action">Rated</span>
+                                <span class="activity-book">"Project Hail Mary"</span>
+                                <span class="activity-rating">5 stars</span>
+                                <span class="activity-time">2 weeks ago</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Animate progress bar
+            const progressBar = document.querySelector('.progress-fill');
+            if (progressBar) {
+                const width = progressBar.style.width;
+                progressBar.style.width = '0%';
+                setTimeout(() => {
+                    progressBar.style.width = width;
+                }, 500);
+            }
+
+            // Add hover effects to stat cards
+            const statCards = document.querySelectorAll('.stat-card');
+            statCards.forEach(card => {
+                card.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-5px)';
+                });
+                
+                card.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
+            });
+        });
+    </script>
+}
