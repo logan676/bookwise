@@ -1,0 +1,131 @@
+@page "{id:int?}"
+@model BookWise.Web.Pages.BookDetailsModel
+@{
+    var book = Model.Book;
+}
+
+<div class="book-detail">
+    <nav class="book-detail-breadcrumbs" aria-label="Breadcrumb">
+        <a class="breadcrumb-link" asp-page="/Index">My Books</a>
+        <span class="breadcrumb-separator" aria-hidden="true">/</span>
+        <span class="breadcrumb-current">@book.Title</span>
+    </nav>
+
+    <div class="book-detail-grid">
+        <aside class="book-detail-sidebar">
+            <div class="book-hero-card">
+                <div class="book-hero-cover">
+                    <img src="@book.CoverImageUrl"
+                         alt="@book.Title cover"
+                         loading="lazy" />
+                </div>
+                <div class="book-hero-meta">
+                    <h1 class="book-hero-title">@book.Title</h1>
+                    <p class="book-hero-author">by @book.Author</p>
+                </div>
+            </div>
+        </aside>
+
+        <section class="book-detail-content">
+            <section class="book-panel">
+                <header class="book-panel-header">
+                    <h2>Book Details</h2>
+                </header>
+                <dl class="book-facts">
+                    <div class="book-fact">
+                        <dt>Author</dt>
+                        <dd>@book.Author</dd>
+                    </div>
+                    <div class="book-fact">
+                        <dt>Published</dt>
+                        <dd>@book.PublishedOnDisplay</dd>
+                    </div>
+                    <div class="book-fact">
+                        <dt>Language</dt>
+                        <dd>@book.Language</dd>
+                    </div>
+                    <div class="book-fact">
+                        <dt>Pages</dt>
+                        <dd>@book.PageCountDisplay</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="book-panel">
+                <header class="book-panel-header">
+                    <h2>My Remarks</h2>
+                    <button class="panel-action" type="button">
+                        <span class="panel-action-icon panel-action-icon--edit" aria-hidden="true"></span>
+                        Edit Remarks
+                    </button>
+                </header>
+
+                <div class="remark-list">
+                    @foreach (var remark in book.Remarks)
+                    {
+                        <article class="remark-card">
+                            <header class="remark-header">
+                                <div class="remark-icon" aria-hidden="true"></div>
+                                <div class="remark-meta">
+                                    <h3 class="remark-title">@remark.Title</h3>
+                                    <p class="remark-date">Added on @remark.AddedOn.ToString("MMMM d, yyyy")</p>
+                                </div>
+                            </header>
+                            <p class="remark-body">@remark.Content</p>
+                        </article>
+                    }
+                </div>
+            </section>
+
+            <section class="book-panel">
+                <header class="book-panel-header">
+                    <h2>Favorite Quotes</h2>
+                    <div class="panel-actions">
+                        <button class="panel-action" type="button">
+                            <span class="panel-action-icon panel-action-icon--quotes" aria-hidden="true"></span>
+                            View All
+                        </button>
+                        <button class="panel-action panel-action--primary" type="button">
+                            <span class="panel-action-icon panel-action-icon--add" aria-hidden="true"></span>
+                            Add Quote
+                        </button>
+                    </div>
+                </header>
+
+                <div class="quote-list">
+                    @foreach (var quote in book.Quotes)
+                    {
+                        <figure class="quote-card">
+                            <blockquote class="quote-text">&ldquo;@quote.Text&rdquo;</blockquote>
+                            <figcaption class="quote-meta">Added on @quote.AddedOn.ToString("MMMM d, yyyy")</figcaption>
+                        </figure>
+                    }
+                </div>
+            </section>
+
+            <section class="book-panel">
+                <header class="book-panel-header">
+                    <h2>Status Log</h2>
+                </header>
+                <ol class="status-log" aria-label="Reading status history">
+                    @foreach (var status in book.StatusHistory)
+                    {
+                        <li class="status-entry">
+                            <div class="status-icon" data-status="@status.Type" aria-hidden="true"></div>
+                            <div class="status-content">
+                                <p class="status-label">@status.Label</p>
+                                <p class="status-date">@status.Description</p>
+                            </div>
+                        </li>
+                    }
+                </ol>
+            </section>
+        </section>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Placeholder for future interactive behaviors specific to the book details page.
+    </script>
+}
