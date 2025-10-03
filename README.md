@@ -1,97 +1,97 @@
 # BookWise
 
-BookWise is a lightweight ASP.NET Core web application for keeping a personal library. It lets you search, add, update, favorite, and delete books that are stored locally in a SQLite database. The UI mirrors the provided mock-up and the backend exposes a small REST API that the client-side script consumes.
+BookWise is a lightweight ASP.NET Core application for curating a personal library. The backend exposes a small REST API backed by SQLite, while the Razor Pages frontend renders the shelves, author explorations, and client-side interactions that sit on top of that API.
 
-Whether you're skimming the catalog or wiring in new features, this document walks through the essentials for getting the application running locally, understanding the project layout, and troubleshooting common setup issues.
+## Architecture Overview
+- **Frontend** – Razor Pages stored under `BookWise.Web/Pages` with a shared layout (`Pages/Shared/_Layout.cshtml`), component partials, and client-side behavior in `wwwroot/js/site.js`. Styling is provided by `wwwroot/css/site.css`, which defines the design system used across pages.
+- **Backend** – Minimal API endpoints declared in `Program.cs` use Entity Framework Core (`BookWiseContext`) to persist `Book` entities to SQLite. The same project hosts the Razor Pages frontend, so both layers share models and validation attributes.
 
-## Features
-- Browse your library with instant search by title or author.
-- Save new books with description, category, rating, and favorite flag.
-- Toggle favorites and delete entries directly from the grid.
-- Minimal REST API implemented with ASP.NET Core Minimal APIs.
-- SQLite persistence handled through Entity Framework Core with automatic migrations and seed data.
+## Frontend Implementation
+- **Dashboard shelves (`Pages/Index.cshtml`)** – Groups the authenticated user's books into status buckets (`reading`, `read`, and `plan-to-read`) using `IndexModel.OnGetAsync`. When no books exist the user is redirected to the add flow.
+- **Add book experience (`Pages/AddBook.cshtml`)** – Presents a search-first UI with a scripted preview list and an `addBook` helper. The sample data and interactions live inline in the Razor page and can be swapped for real API calls.
+- **Explore hub (`Pages/Explore.cshtml`)** – Renders a tabbed interface with authors, quotes, and recommendations sourced from the strongly-typed data assembled in `ExploreModel`.
+- **Shared layout and cards** – `_Layout.cshtml` defines navigation, while `_BookShelfItem.cshtml` renders individual book tiles that are reused across sections.
+- **Client-side script (`wwwroot/js/site.js`)** – Powers search, filtering, add-book form submission, and favorite toggles by calling `/api/books` with the Fetch API. It manages DOM state for result lists, empty states, optimistic UI, and basic error handling.
+- **Styling (`wwwroot/css/site.css`)** – Uses CSS custom properties to standardize colors, spacing, and components (navigation, cards, forms). The file mirrors the mock-up with responsive flexbox and grid layouts.
 
-## Tech Stack
-- .NET 8 / ASP.NET Core Razor Pages
-- Entity Framework Core + SQLite
-- Vanilla JavaScript for client interactions
-- CSS styled to match the provided mockup
+## Backend Implementation
+- **Program bootstrap (`Program.cs`)** – Configures Razor Pages, registers `BookWiseContext`, runs SQLite migrations, and seeds three starter books when the database is empty.
+- **Book entity (`Models/Book.cs`)** – Describes the persisted model with validation attributes (title/author required, cover URL, category, ISBN, status, rating, timestamps).
+- **Entity Framework Core (`Data/BookWiseContext.cs`)** – Provides the `DbContext`, enforces indexes, and stamps `UpdatedAt` on modifications.
+- **REST API (`Program.cs`)** – `/api/books` is exposed as a minimal API group supporting:
+  - query-based search with optional `search`, `onlyFavorites`, and `category` filters;
+  - CRUD operations (`GET`, `POST`, `PUT`, `DELETE`) with validation driven by `CreateBookRequest` and `UpdateBookRequest` records;
+  - JSON problem details when validation fails.
 
 ## Getting Started
 
 ### Prerequisites
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- (Optional) [SQLite CLI](https://sqlite.org/download.html) if you want to inspect the database manually
-- (Optional) Install the `dotnet-ef` CLI globally so migrations can be applied without a local tool manifest:
+- (Optional) [SQLite CLI](https://sqlite.org/download.html) for inspecting the database
+- (Optional) `dotnet-ef` CLI for manual migrations:
   ```bash
   dotnet tool install --global dotnet-ef
   ```
 
-### Clone and Run
+### Install & Run
 ```bash
-# Clone the repository
-git clone git@github.com:logan676/bookwise.git
-cd bookwise
-
-# Restore and build
+# Restore dependencies
 dotnet restore
+
+# Build the solution
 dotnet build
 
-# Apply database migrations (creates bookwise.db with seed data)
+# Apply database migrations (creates BookWise.Web/Data/bookwise.db)
 dotnet ef database update \
   --project BookWise.Web/BookWise.Web.csproj \
   --startup-project BookWise.Web/BookWise.Web.csproj
 
-# Run the web app
+# Launch the app
 dotnet run --project BookWise.Web/BookWise.Web.csproj
 ```
+The server listens on `https://localhost:7240` and `http://localhost:5240` by default.
 
-The app listens on `https://localhost:7240` and `http://localhost:5240` by default. Opening the home page shows the search bar, empty state, and seeded sample books.
-
-If you prefer hot reload while iterating on Razor Pages or CSS/JS, run the project with the `watch` command instead:
-
+For hot reload during UI work:
 ```bash
 dotnet watch --project BookWise.Web/BookWise.Web.csproj
 ```
+This refreshes Razor markup, static assets, and API changes on save.
 
-### Project Structure
-
+## Project Structure
 ```
 BookWise.Web/
 ├── Data/                # EF Core DbContext, migrations, and seed helpers
-├── Models/              # Domain models and DTOs shared across API + UI
-├── Pages/               # Razor Pages for the UI experience
-├── wwwroot/             # Static assets (CSS, JS, fonts)
-└── Program.cs           # Minimal API endpoints and Razor Pages setup
+├── Models/              # Domain models shared by UI and API
+├── Pages/               # Razor Pages, view models, and partials
+├── wwwroot/             # Static assets (CSS, JS, fonts, icons)
+└── Program.cs           # App bootstrap + minimal API definitions
 ```
 
-### SQLite Database
-- The database file lives at `BookWise.Web/Data/bookwise.db`.
-- When the app starts, it ensures the database exists, applies pending migrations, and seeds a few books if the table is empty.
-- You can reset the database by deleting `bookwise.db` and rerunning the migration command. Seed data will be recreated automatically.
-
-### API Endpoints
+## API Endpoints
 | Method | Endpoint | Description |
 | ------ | -------- | ----------- |
 | `GET`  | `/api/books?search=term&onlyFavorites=true&category=genre` | Returns up to 25 books filtered by optional query parameters. |
 | `GET`  | `/api/books/{id}` | Returns a single book by ID. |
-| `POST` | `/api/books` | Creates a new book; expects JSON matching the `CreateBookRequest` schema. |
-| `PUT`  | `/api/books/{id}` | Updates a book in place. |
-| `DELETE` | `/api/books/{id}` | Removes a book. |
+| `POST` | `/api/books` | Creates a new book; expects JSON matching `CreateBookRequest`. |
+| `PUT`  | `/api/books/{id}` | Updates a book in place using `UpdateBookRequest`. |
+| `DELETE` | `/api/books/{id}` | Removes a book permanently. |
 
-All endpoints return standard HTTP status codes and validation errors are emitted as RFC 7807 problem responses.
+All endpoints return standard HTTP status codes. Validation failures emit RFC 7807 problem responses, including member-specific error messages.
+
+## Data Model & Persistence
+- Database file lives at `BookWise.Web/Data/bookwise.db` (ignored by Git).
+- `Book` fields cover descriptive metadata, read status (`plan-to-read`, `reading`, `read`), `IsFavorite`, rating, and timestamps.
+- Migrations run automatically on startup; deleting the `.db` file and rerunning migrations resets the dataset with seeded titles.
 
 ## Development Notes
-- Client-side behavior lives in `BookWise.Web/wwwroot/js/site.js`.
-- Styles are defined in `BookWise.Web/wwwroot/css/site.css`.
-- Minimal API requests reuse the validation attributes defined on `CreateBookRequest` and `UpdateBookRequest` in `Program.cs`.
-- Razor Pages and API endpoints share the same project so you can refactor shared logic (such as validation helpers) without having to juggle multiple projects.
+- JavaScript logic in `wwwroot/js/site.js` is self-contained and can be modularized if the project grows.
+- CSS is plain, but the `Styles` directory is available if you prefer to introduce SCSS or PostCSS.
+- Razor Pages and API live in the same project, simplifying shared validation and DTO reuse.
 
 ## Troubleshooting
+- **`dotnet ef` command not found** – Install the global tool or add a tool manifest (see prerequisites).
+- **Schema changes not applied** – Delete `BookWise.Web/Data/bookwise.db` and run the migration command again.
+- **HTTPS warnings on first run** – Trust the development certificate with `dotnet dev-certs https --trust`.
+- **Static assets seem stale** – When not using `dotnet watch`, clear your browser cache or restart the app so CSS/JS changes are re-served.
 
-- **`dotnet ef` command not found** – Make sure the `dotnet-ef` tool is installed globally (see prerequisites) or use a tool manifest with `dotnet new tool-manifest`.
-- **Database schema mismatch** – Delete `BookWise.Web/Data/bookwise.db` and rerun `dotnet ef database update` to regenerate the file with the latest migrations.
-- **HTTPS certificate prompts on first run** – Trust the development certificate with `dotnet dev-certs https --trust` if the browser refuses the local HTTPS endpoint.
-- **Static assets not updating** – When using `dotnet run`, browser caching may hold on to stale CSS/JS. Run with `dotnet watch` for automatic rebuilds and disable cache in DevTools while testing.
-
-Feel free to customize the UI or extend the data model to support additional metadata such as reading status, notes, or reviews.
+Feel free to tailor the UI, expand the book schema, or replace the Add Book stub with a real search integration.

@@ -35,7 +35,26 @@
                     <a class="nav-link" asp-page="/Statistics">Statistics</a>
                 </nav>
             </div>
-            
+            <div class="nav-right">
+                <details class="settings-menu">
+                    <summary class="settings-toggle" aria-haspopup="true" aria-label="Open user menu">
+                        <span class="sr-only">Open user menu</span>
+                        <span class="settings-avatar" aria-hidden="true">
+                            <img src="~/img/bookwise-icon.svg" alt="" />
+                        </span>
+                        <span class="settings-chevron" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </span>
+                    </summary>
+                    <div class="settings-menu-panel" role="menu">
+                        <a class="settings-menu-item" asp-page="/Settings" role="menuitem">Settings</a>
+                        <button type="button" class="settings-menu-item" role="menuitem" data-menu-role="signout">Sign out</button>
+                    </div>
+                </details>
+            </div>
+
         </header>
         <main class="@mainClass" role="main">
             @RenderBody()

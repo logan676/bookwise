@@ -373,6 +373,19 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
+  function initUserMenu() {
+    const menu = document.querySelector('.settings-menu');
+    if (!menu) {
+      return;
+    }
+
+    const signOutButton = menu.querySelector('[data-menu-role="signout"]');
+    signOutButton?.addEventListener('click', (event) => {
+      event.preventDefault();
+      menu.removeAttribute('open');
+    });
+  }
+
   // Navigation highlighting
   function initNavigation() {
     const navLinks = document.querySelectorAll(".nav-link");
@@ -405,5 +418,6 @@
   document.addEventListener("DOMContentLoaded", () => {
     init();
     initNavigation();
+    initUserMenu();
   });
 })();
