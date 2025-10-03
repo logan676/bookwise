@@ -1,12 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">BookWise icon</title>
   <defs>
-    <linearGradient id="faviconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#2D7FF9" />
       <stop offset="100%" stop-color="#52C7EA" />
     </linearGradient>
   </defs>
   <g fill="none" fill-rule="evenodd">
-    <path d="M64 16c19.882 0 36 16.118 36 36v32c0 4.418-3.582 8-8 8-1.906 0-3.747-.671-5.197-1.878-4.316-3.546-9.576-5.538-15.067-5.538-7.256 0-13.965 3.136-18.71 8.606-3.01 3.457-8.323 3.73-11.78.72A8 8 0 0 1 36 88V52c0-19.882 16.118-36 36-36Z" fill="url(#faviconGradient)" />
+    <path d="M64 16c19.882 0 36 16.118 36 36v32c0 4.418-3.582 8-8 8-1.906 0-3.747-.671-5.197-1.878-4.316-3.546-9.576-5.538-15.067-5.538-7.256 0-13.965 3.136-18.71 8.606-3.01 3.457-8.323 3.73-11.78.72A8 8 0 0 1 36 88V52c0-19.882 16.118-36 36-36Z" fill="url(#iconGradient)" />
     <path d="M94 88c0 4.418-3.358 8-7.5 8S79 92.418 79 88s3.358-8 7.5-8 7.5 3.582 7.5 8Z" fill="#fff" opacity=".9" />
     <path d="M58 88c0 4.418-3.358 8-7.5 8S43 92.418 43 88s3.358-8 7.5-8 7.5 3.582 7.5 8Z" fill="#fff" opacity=".9" />
     <circle cx="50.5" cy="88" r="3.5" fill="#23395B" />

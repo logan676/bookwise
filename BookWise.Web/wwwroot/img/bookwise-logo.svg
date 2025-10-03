@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 120" role="img" aria-labelledby="title desc">
+  <title id="title">BookWise logo</title>
+  <desc id="desc">An open book forming an owl face next to the BookWise wordmark.</desc>
+  <defs>
+    <linearGradient id="bookwiseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2D7FF9" />
+      <stop offset="100%" stop-color="#52C7EA" />
+    </linearGradient>
+  </defs>
+  <g fill="none" fill-rule="evenodd">
+    <g transform="translate(12 18)">
+      <path d="M61 12c23.196 0 42 18.804 42 42v36c0 4.418-3.582 8-8 8-2.01 0-3.955-.742-5.44-2.08-4.586-4.084-10.498-6.356-16.727-6.356-8.03 0-15.457 3.56-20.805 9.56-3.076 3.458-8.343 3.78-11.8.703A8 8 0 0 1 36 92V54C36 30.804 54.804 12 78 12Z" fill="url(#bookwiseGradient)" />
+      <path d="M95 87.5c0 4.142-3.358 7.5-7.5 7.5-4.142 0-7.5-3.358-7.5-7.5S83.358 80 87.5 80s7.5 3.358 7.5 7.5Z" fill="#fff" opacity=".9" />
+      <path d="M59 87.5c0 4.142-3.358 7.5-7.5 7.5S44 91.642 44 87.5 47.358 80 51.5 80s7.5 3.358 7.5 7.5Z" fill="#fff" opacity=".9" />
+      <circle cx="51.5" cy="87.5" r="3.5" fill="#23395B" />
+      <circle cx="87.5" cy="87.5" r="3.5" fill="#23395B" />
+      <path d="M36.2 52.5 11 63.7c-4.018 1.782-8.768-.045-10.55-4.063C-.332 56.62 1.496 51.87 5.513 50.088l32.447-14.398a8.01 8.01 0 0 1 6.494.246l15.646 7.3c11.126 5.192 24.203 5.154 35.297-.102l15.184-7.194c3.97-1.882 8.71-.11 10.592 3.86 1.882 3.97.11 8.711-3.86 10.593l-23.984 11.359c-13.797 6.542-29.736 6.588-43.57.127l-13.66-6.3c-1.982-.914-4.267-.942-6.3-.086Z" fill="#1B4F9C" />
+    </g>
+    <g fill="#23395B" font-family="'Inter', 'Segoe UI', sans-serif" font-size="64" font-weight="600" letter-spacing=".5">
+      <text x="150" y="78">Book</text>
+      <text x="150" y="118">Wise</text>
+    </g>
+  </g>
+</svg>
