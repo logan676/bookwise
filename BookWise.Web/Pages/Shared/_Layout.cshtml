@@ -41,12 +41,22 @@
                 </nav>
             </div>
             <div class="nav-right">
-                <div class="nav-search">
-                    <input type="search" placeholder="Search..." class="search-input" />
-                </div>
-                <button class="profile-button" type="button" aria-label="Open profile menu">
-                    <img src="https://i.pravatar.cc/48?img=47" alt="Profile avatar" />
-                </button>
+                <details class="settings-menu">
+                    <summary class="settings-toggle" aria-haspopup="menu" aria-expanded="false">
+                        <span class="settings-avatar" aria-hidden="true">
+                            <img src="https://i.pravatar.cc/48?img=47" alt="" />
+                        </span>
+                        <span class="settings-label">Settings</span>
+                        <span class="settings-chevron" aria-hidden="true">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </span>
+                    </summary>
+                    <div class="settings-menu-panel" role="menu">
+                        <a class="settings-menu-item" asp-page="/Settings" role="menuitem">Account Settings</a>
+                    </div>
+                </details>
             </div>
         </header>
         <main class="@mainClass" role="main">
