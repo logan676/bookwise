@@ -70,8 +70,8 @@
             <div class="filter-label">Filter by Status:</div>
             <div class="filter-tabs">
                 <button class="filter-tab active" data-status="all">All</button>
-                <button class="filter-tab" data-status="in-reading">In Reading</button>
-                <button class="filter-tab" data-status="already-read">Already Read</button>
+                <button class="filter-tab" data-status="reading">In Reading</button>
+                <button class="filter-tab" data-status="read">Already Read</button>
                 <button class="filter-tab" data-status="plan-to-read">Plan to Read</button>
             </div>
         </div>
@@ -128,12 +128,12 @@
                 </div>
                 <div class="card-content">
                     <div class="status-grid">
-                        <div class="status-item in-reading">
+                        <div class="status-item reading">
                             <div class="status-icon">📚</div>
                             <div class="status-number">@Model.InReadingBooks</div>
                             <div class="status-label">In Reading</div>
                         </div>
-                        <div class="status-item already-read">
+                        <div class="status-item read">
                             <div class="status-icon">✅</div>
                             <div class="status-number">@Model.AlreadyReadBooks</div>
                             <div class="status-label">Already Read</div>
