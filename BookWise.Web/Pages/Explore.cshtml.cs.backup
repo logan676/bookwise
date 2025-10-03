@@ -9,7 +9,7 @@ namespace BookWise.Web.Pages
         public QuoteCard QuoteOfTheDay { get; private set; } = QuoteCard.Empty;
         public IReadOnlyList<QuoteCard> Quotes { get; private set; } = new List<QuoteCard>();
         public IReadOnlyList<RecommendedAuthor> RecommendedAuthors { get; private set; } = new List<RecommendedAuthor>();
-        public IReadOnlyList<RecommendedSeriesItem> RecommendedSeries { get; private set; } = new List<RecommendedSeriesItem>();
+        public IReadOnlyList<RecommendedSeries> RecommendedSeries { get; private set; } = new List<RecommendedSeries>();
         public IReadOnlyList<RecommendedAdaptation> RecommendedAdaptations { get; private set; } = new List<RecommendedAdaptation>();
 
         public void OnGet()
@@ -205,7 +205,7 @@ namespace BookWise.Web.Pages
             return (quoteOfTheDay, quotes);
         }
 
-        private static (IReadOnlyList<RecommendedAuthor> Authors, IReadOnlyList<RecommendedSeriesItem> Series, IReadOnlyList<RecommendedAdaptation> Adaptations) BuildRecommendations()
+        private static (IReadOnlyList<RecommendedAuthor> Authors, IReadOnlyList<RecommendedSeries> Series, IReadOnlyList<RecommendedAdaptation> Adaptations) BuildRecommendations()
         {
             var authors = new List<RecommendedAuthor>
             {
@@ -229,7 +229,7 @@ namespace BookWise.Web.Pages
                 }
             };
 
-            var series = new List<RecommendedSeriesItem>
+            var series = new List<RecommendedSeries>
             {
                 new()
                 {
@@ -331,7 +331,7 @@ namespace BookWise.Web.Pages
             public string ImageUrl { get; init; } = string.Empty;
         }
 
-        public class RecommendedSeriesItem
+        public class RecommendedSeries
         {
             public string Title { get; init; } = string.Empty;
             public string Installment { get; init; } = string.Empty;
