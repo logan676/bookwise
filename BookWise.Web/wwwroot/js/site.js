@@ -39,6 +39,16 @@
     books: [],
   };
 
+  const themeConfig = {
+    storageKey: "bookwise.theme",
+    defaultPreference: "system",
+    systemMatcher: typeof window.matchMedia === "function"
+      ? window.matchMedia("(prefers-color-scheme: dark)")
+      : null,
+  };
+
+  let currentThemePreference = themeConfig.defaultPreference;
+
   const icons = {
     star(fill) {
       const color = fill ? "#f59e0b" : "currentColor";
@@ -81,6 +91,102 @@
       event.preventDefault();
       await saveBook();
     });
+  }
+
+  function initTheme() {
+    const storedPreference = getStoredThemePreference();
+    const initialPreference = storedPreference || themeConfig.defaultPreference;
+    applyTheme(initialPreference);
+
+    const buttons = document.querySelectorAll(
+      ".theme-choice-group .theme-choice"
+    );
+    if (buttons.length) {
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const preference = button.dataset.theme;
+          if (!preference || preference === currentThemePreference) {
+            applyTheme(preference || initialPreference);
+            return;
+          }
+          applyTheme(preference, { persist: true });
+        });
+      });
+    }
+
+    if (!themeConfig.systemMatcher) {
+      return;
+    }
+
+    const handleSystemChange = () => {
+      if (currentThemePreference === "system") {
+        applyTheme("system");
+      }
+    };
+
+    if (typeof themeConfig.systemMatcher.addEventListener === "function") {
+      themeConfig.systemMatcher.addEventListener("change", handleSystemChange);
+    } else if (typeof themeConfig.systemMatcher.addListener === "function") {
+      themeConfig.systemMatcher.addListener(handleSystemChange);
+    }
+  }
+
+  function applyTheme(preference, options = {}) {
+    if (!preference) {
+      preference = themeConfig.defaultPreference;
+    }
+
+    currentThemePreference = preference;
+    const resolvedTheme =
+      preference === "system"
+        ? themeConfig.systemMatcher && themeConfig.systemMatcher.matches
+          ? "dark"
+          : "light"
+        : preference;
+
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.dataset.themePreference = preference;
+
+    updateThemeButtons(preference);
+
+    if (options.persist) {
+      storeThemePreference(preference);
+    }
+  }
+
+  function updateThemeButtons(preference) {
+    const buttons = document.querySelectorAll(
+      ".theme-choice-group .theme-choice"
+    );
+    if (!buttons.length) {
+      return;
+    }
+
+    buttons.forEach((button) => {
+      const isActive = button.dataset.theme === preference;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  function getStoredThemePreference() {
+    try {
+      const value = localStorage.getItem(themeConfig.storageKey);
+      if (value === "light" || value === "dark" || value === "system") {
+        return value;
+      }
+    } catch (error) {
+      /* ignore storage errors */
+    }
+    return null;
+  }
+
+  function storeThemePreference(value) {
+    try {
+      localStorage.setItem(themeConfig.storageKey, value);
+    } catch (error) {
+      /* ignore storage errors */
+    }
   }
 
   async function triggerSearch(focusEmpty = true) {
@@ -416,6 +522,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
+    initTheme();
     init();
     initNavigation();
     initUserMenu();

@@ -1,10 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - BookWise</title>
     <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
+    <script>
+        (function () {
+            try {
+                var preference = localStorage.getItem('bookwise.theme') || 'system';
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                var resolved = preference === 'dark' || (preference === 'system' && prefersDark) ? 'dark' : 'light';
+                document.documentElement.dataset.theme = resolved;
+                document.documentElement.dataset.themePreference = preference;
+            } catch (error) {
+                // ignore errors (e.g., private mode)
+            }
+        })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
