@@ -18,11 +18,12 @@
                        placeholder="Search for a book by title or author..." 
                        class="search-input" 
                        autocomplete="off" />
-                <button type="button" class="clear-search" id="clear-search" style="display: none;">
+                <button type="button" class="search-submit" id="execute-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.35-4.35"/>
                     </svg>
+                    Search
                 </button>
             </div>
         </div>
@@ -56,6 +57,7 @@
     <!-- Search Results -->
     <div class="search-results-container" id="search-results" style="display: none;">
         <h2 class="search-results-title">Search Results</h2>
+        <div id="search-feedback" class="search-feedback" style="display: none;"></div>
         <div class="search-results-list" id="results-list">
             <!-- Results will be populated by JavaScript -->
         </div>
@@ -66,120 +68,194 @@
     <script>
         // Search functionality
         const searchInput = document.getElementById('book-search');
-        const clearButton = document.getElementById('clear-search');
+        const searchButton = document.getElementById('execute-search');
         const emptyState = document.getElementById('empty-state');
         const searchResults = document.getElementById('search-results');
         const resultsList = document.getElementById('results-list');
         const startSearchingBtn = document.getElementById('start-searching');
+        const searchFeedback = document.getElementById('search-feedback');
+        const placeholderCover = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="60" height="90"><rect width="100%" height="100%" fill="#e2e8f0"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#64748b">No Cover</text></svg>');
 
-        // Sample search results data
-        const sampleResults = [
-            {
-                title: "The Secret Garden",
-                author: "Frances Hodgson Burnett",
-                published: "1911",
-                language: "English",
-                cover: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=200&h=300&fit=crop"
-            },
-            {
-                title: "秘密花园",
-                author: "Li Wei",
-                published: "2005",
-                language: "Chinese",
-                cover: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=300&fit=crop"
-            },
-            {
-                title: "The Secret Garden: A Graphic Novel",
-                author: "Mariah Marsden",
-                published: "2021",
-                language: "English",
-                cover: "https://images.unsplash.com/photo-1518373714866-3f1478910cc0?w=200&h=300&fit=crop"
-            },
-            {
-                title: "Return to the Secret Garden",
-                author: "Holly Webb",
-                published: "2011",
-                language: "English",
-                cover: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&h=300&fit=crop"
-            },
-            {
-                title: "秘密花园：图画版",
-                author: "Johanna Basford",
-                published: "2015",
-                language: "Chinese",
-                cover: "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=200&h=300&fit=crop"
+        startSearchingBtn?.addEventListener('click', () => {
+            searchInput.focus();
+        });
+
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                handleSearch();
             }
-        ];
+        });
 
-        searchInput.addEventListener('input', (e) => {
-            const value = e.target.value.trim();
-            
-            if (value.length > 0) {
-                clearButton.style.display = 'block';
-                showSearchResults(value);
-            } else {
-                clearButton.style.display = 'none';
+        searchInput.addEventListener('input', () => {
+            if (!searchInput.value.trim()) {
                 showEmptyState();
             }
         });
 
-        clearButton.addEventListener('click', () => {
-            searchInput.value = '';
-            clearButton.style.display = 'none';
-            showEmptyState();
-            searchInput.focus();
-        });
+        searchButton.addEventListener('click', handleSearch);
 
-        startSearchingBtn.addEventListener('click', () => {
-            searchInput.focus();
+        resultsList.addEventListener('click', (event) => {
+            const button = event.target.closest('.add-book-btn');
+            if (!button) {
+                return;
+            }
+
+            const { title, author } = button.dataset;
+            addBook(title ?? '', author ?? '');
         });
 
         function showEmptyState() {
             emptyState.style.display = 'block';
             searchResults.style.display = 'none';
+            resultsList.innerHTML = '';
+            setFeedback('');
         }
 
-        function showSearchResults(query) {
+        function setFeedback(message, state) {
+            if (!message) {
+                searchFeedback.style.display = 'none';
+                searchFeedback.textContent = '';
+                searchFeedback.className = 'search-feedback';
+                return;
+            }
+
+            const classes = ['search-feedback'];
+            if (state) {
+                classes.push(state);
+            }
+
+            searchFeedback.className = classes.join(' ');
+            searchFeedback.textContent = message;
+            searchFeedback.style.display = 'block';
+        }
+
+        async function handleSearch() {
+            const query = searchInput.value.trim();
+            if (!query) {
+                showEmptyState();
+                return;
+            }
+
+            searchButton.disabled = true;
             emptyState.style.display = 'none';
             searchResults.style.display = 'block';
-            
-            // Filter results based on query (simple simulation)
-            const filteredResults = sampleResults.filter(book => 
-                book.title.toLowerCase().includes(query.toLowerCase()) ||
-                book.author.toLowerCase().includes(query.toLowerCase())
-            );
-            
-            renderResults(filteredResults);
+            resultsList.innerHTML = '';
+            setFeedback('Searching for books...');
+
+            try {
+                const response = await fetch('/api/book-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Search request failed');
+                }
+
+                const data = await response.json();
+                const books = Array.isArray(data.books) ? data.books : [];
+
+                if (books.length === 0) {
+                    setFeedback('No matching books found. Try a different keyword.', 'error');
+                    return;
+                }
+
+                setFeedback(`Showing ${books.length} suggestion${books.length === 1 ? '' : 's'}.`, 'success');
+                renderResults(books);
+            } catch (error) {
+                setFeedback('There was an issue fetching suggestions. Please try again.', 'error');
+            } finally {
+                searchButton.disabled = false;
+            }
         }
 
         function renderResults(results) {
-            resultsList.innerHTML = results.map(book => `
-                <div class="search-result-item">
-                    <div class="book-cover">
-                        <img src="${book.cover}" alt="${book.title}" />
+            const html = results.map((book) => {
+                const title = escapeHtml(book.title ?? 'Untitled');
+                const author = escapeHtml(book.author ?? 'Unknown author');
+                const metaParts = [];
+
+                if (book.published) {
+                    metaParts.push(`Published: ${escapeHtml(book.published)}`);
+                }
+
+                if (book.language) {
+                    metaParts.push(`Language: ${escapeHtml(book.language)}`);
+                }
+
+                const metadata = metaParts.length > 0
+                    ? `<p class="book-details">${metaParts.join(' | ')}</p>`
+                    : '';
+
+                const description = book.description
+                    ? `<p class="book-details">${escapeHtml(book.description)}</p>`
+                    : '';
+
+                const cover = book.coverImageUrl
+                    ? escapeAttribute(book.coverImageUrl)
+                    : placeholderCover;
+
+                return `
+                    <div class="search-result-item">
+                        <div class="book-cover">
+                            <img src="${cover}" alt="${title}" />
+                        </div>
+                        <div class="book-info">
+                            <h3 class="book-title">${title}</h3>
+                            <p class="book-author">by ${author}</p>
+                            ${metadata}
+                            ${description}
+                        </div>
+                        <button class="add-book-btn" data-title="${escapeAttribute(book.title ?? '')}" data-author="${escapeAttribute(book.author ?? '')}">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Add
+                        </button>
                     </div>
-                    <div class="book-info">
-                        <h3 class="book-title">${book.title}</h3>
-                        <p class="book-author">by ${book.author}</p>
-                        <p class="book-details">Published: ${book.published} | Language: ${book.language}</p>
-                    </div>
-                    <button class="add-book-btn" onclick="addBook('${book.title}', '${book.author}')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        Add
-                    </button>
-                </div>
-            `).join('');
+                `;
+            }).join('');
+
+            resultsList.innerHTML = html;
+        }
+
+        function escapeHtml(value) {
+            if (value === undefined || value === null) {
+                return '';
+            }
+
+            return String(value).replace(/[&<>"']/g, (char) => {
+                switch (char) {
+                    case '&':
+                        return '&amp;';
+                    case '<':
+                        return '&lt;';
+                    case '>':
+                        return '&gt;';
+                    case '"':
+                        return '&quot;';
+                    case "'":
+                        return '&#39;';
+                    default:
+                        return char;
+                }
+            });
+        }
+
+        function escapeAttribute(value) {
+            return escapeHtml(value ?? '');
         }
 
         function addBook(title, author) {
-            // Simulate adding the book
             alert(`Added "${title}" by ${author} to your library!`);
-            // In a real app, this would make an API call to add the book
-            // Then redirect back to the main page
             window.location.href = '/';
         }
+
+        showEmptyState();
     </script>
 }

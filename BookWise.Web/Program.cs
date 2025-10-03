@@ -1,15 +1,23 @@
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using BookWise.Web.Data;
 using BookWise.Web.Models;
-using Microsoft.Data.Sqlite;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHttpClient();
 
 builder.Services.AddDbContext<BookWiseContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -177,6 +185,124 @@ books.MapDelete("/{id:int}", async (int id, BookWiseContext db) =>
     return Results.NoContent();
 });
 
+app.MapPost("/api/book-search", async Task<IResult> (
+    [FromBody] BookSearchRequest request,
+    IHttpClientFactory httpClientFactory,
+    IConfiguration configuration) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Query))
+    {
+        return Results.BadRequest(new { message = "Query is required." });
+    }
+
+    var apiKey = configuration["OpenAI:ApiKey"] ?? configuration["OPENAI_API_KEY"];
+    if (string.IsNullOrWhiteSpace(apiKey))
+    {
+        return Results.Problem("OpenAI API key is not configured.", statusCode: StatusCodes.Status500InternalServerError);
+    }
+
+    var model = configuration["OpenAI:Model"] ?? "gpt-4.1-mini";
+
+    var httpClient = httpClientFactory.CreateClient();
+    httpClient.BaseAddress = new Uri("https://api.openai.com/v1/");
+    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+    httpClient.DefaultRequestHeaders.Add("OpenAI-Beta", "JSON_FORMATTING=1");
+
+    var requestBody = new
+    {
+        model,
+        response_format = new
+        {
+            type = "json_schema",
+            json_schema = new
+            {
+                name = "book_search_results",
+                schema = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        books = new
+                        {
+                            type = "array",
+                            items = new
+                            {
+                                type = "object",
+                                properties = new
+                                {
+                                    title = new { type = "string" },
+                                    author = new { type = "string" },
+                                    description = new { type = "string" },
+                                    published = new { type = "string" },
+                                    language = new { type = "string" },
+                                    coverImageUrl = new { type = "string" }
+                                },
+                                required = new[] { "title", "author" },
+                                additionalProperties = false
+                            }
+                        }
+                    },
+                    required = new[] { "books" },
+                    additionalProperties = false
+                }
+            }
+        },
+        input = new object[]
+        {
+            new
+            {
+                role = "system",
+                content = "You return book search suggestions as JSON according to the provided schema."
+            },
+            new
+            {
+                role = "user",
+                content = $"Find up to 5 books that match the search term '{request.Query}'. Include recent publications when possible and provide metadata."
+            }
+        }
+    };
+
+    using var httpContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+    var response = await httpClient.PostAsync("responses", httpContent);
+
+    if (!response.IsSuccessStatusCode)
+    {
+        var details = await response.Content.ReadAsStringAsync();
+        return Results.Problem($"OpenAI request failed: {details}", statusCode: (int)response.StatusCode);
+    }
+
+    using var responseStream = await response.Content.ReadAsStreamAsync();
+    using var document = await JsonDocument.ParseAsync(responseStream);
+    if (!document.RootElement.TryGetProperty("output", out var outputElement))
+    {
+        return Results.Ok(new { books = Array.Empty<BookSuggestion>() });
+    }
+
+    var booksJson = outputElement
+        .EnumerateArray()
+        .SelectMany(chunk => chunk.TryGetProperty("content", out var contentElement)
+            ? contentElement.EnumerateArray()
+            : Enumerable.Empty<JsonElement>())
+        .Select(element => element.TryGetProperty("text", out var textElement) ? textElement.GetString() : null)
+        .Where(text => !string.IsNullOrWhiteSpace(text))
+        .LastOrDefault();
+
+    if (string.IsNullOrWhiteSpace(booksJson))
+    {
+        return Results.Ok(new { books = Array.Empty<BookSuggestion>() });
+    }
+
+    try
+    {
+        var suggestions = JsonSerializer.Deserialize<BookSearchResponse>(booksJson, JsonOptions.Instance);
+        return Results.Ok(suggestions ?? new BookSearchResponse(Array.Empty<BookSuggestion>()));
+    }
+    catch (JsonException)
+    {
+        return Results.Ok(new { books = Array.Empty<BookSuggestion>() });
+    }
+});
+
 app.Run();
 
 record BookQuery(string? Search, bool OnlyFavorites = false, string? Category = null);
@@ -223,4 +349,25 @@ record UpdateBookRequest(
         book.IsFavorite = IsFavorite;
         book.Rating = Rating;
     }
+}
+
+record BookSearchRequest(string Query);
+
+record BookSearchResponse(BookSuggestion[] Books);
+
+record BookSuggestion(
+    string Title,
+    string Author,
+    string? Description,
+    string? Published,
+    string? Language,
+    string? CoverImageUrl
+);
+
+static class JsonOptions
+{
+    public static readonly JsonSerializerOptions Instance = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
 }

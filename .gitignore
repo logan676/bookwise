@@ -15,6 +15,7 @@ obj/
 .vs/
 .idea/
 *.csproj.user
+BookWise.Web/appsettings.Local.json
 
 # Logs and temp
 *.log
