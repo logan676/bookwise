@@ -23,31 +23,11 @@
         <header class="top-nav">
             <div class="nav-left">
                 <a class="brand" asp-area="" asp-page="/Index">
+                    <span class="sr-only">BookWise</span>
                     <span class="brand-icon" aria-hidden="true">
-                        <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <!-- Person's head -->
-                            <circle cx="50" cy="25" r="12" fill="#3498db" stroke="#3498db" stroke-width="1"/>
-                            
-                            <!-- Person's body (simplified) -->
-                            <ellipse cx="50" cy="50" rx="8" ry="15" fill="#3498db"/>
-                            
-                            <!-- Open book pages -->
-                            <path d="M20 45 Q50 35 80 45 L80 85 Q50 75 20 85 Z" fill="#3498db" stroke="#3498db" stroke-width="1"/>
-                            
-                            <!-- Book center fold -->
-                            <line x1="50" y1="40" x2="50" y2="80" stroke="white" stroke-width="2"/>
-                            
-                            <!-- Book pages lines -->
-                            <line x1="30" y1="50" x2="45" y2="50" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                            <line x1="30" y1="56" x2="45" y2="56" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                            <line x1="30" y1="62" x2="45" y2="62" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                            
-                            <line x1="55" y1="50" x2="70" y2="50" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                            <line x1="55" y1="56" x2="70" y2="56" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                            <line x1="55" y1="62" x2="70" y2="62" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                        </svg>
+                        <img src="~/img/bookwise-icon.svg" width="36" height="36" alt="" />
                     </span>
-                    <span class="brand-name">BookWise</span>
+                    <span class="brand-name" aria-hidden="true">BookWise</span>
                 </a>
                 <nav class="nav-links" aria-label="Primary">
                     <a class="nav-link" asp-page="/Index">My Books</a>
