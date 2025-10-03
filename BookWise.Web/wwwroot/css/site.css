@@ -3418,11 +3418,11 @@ a:hover {
   transform: translateY(-2px);
 }
 
-.status-item.in-reading {
+.status-item.reading {
   background: linear-gradient(135deg, #fef3c7, #fde68a);
 }
 
-.status-item.already-read {
+.status-item.read {
   background: linear-gradient(135deg, #d1fae5, #a7f3d0);
 }
 

@@ -27,8 +27,8 @@ namespace BookWise.Web.Pages
             var books = await _context.Books.ToListAsync();
             
             TotalBooks = books.Count;
-            InReadingBooks = books.Count(b => b.Status == "in-reading");
-            AlreadyReadBooks = books.Count(b => b.Status == "already-read");
+            InReadingBooks = books.Count(b => b.Status == "reading");
+            AlreadyReadBooks = books.Count(b => b.Status == "read");
             PlanToReadBooks = books.Count(b => b.Status == "plan-to-read");
 
             // Calculate genre statistics
