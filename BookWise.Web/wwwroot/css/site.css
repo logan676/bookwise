@@ -779,6 +779,57 @@ a:hover {
   -webkit-box-orient: vertical;
 }
 
+.book-author {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.book-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.6rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: rgba(30, 167, 253, 0.12);
+  color: var(--brand-600);
+}
+
+.book-status[data-status="read"] {
+  background: rgba(34, 197, 94, 0.15);
+  color: #15803d;
+}
+
+.book-status[data-status="plan-to-read"] {
+  background: rgba(234, 179, 8, 0.15);
+  color: #b45309;
+}
+
+.section-empty-message {
+  text-align: center;
+  padding: 2.25rem 1.75rem;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px dashed rgba(148, 163, 184, 0.35);
+  color: var(--gray-500);
+}
+
+.section-empty-message h3 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  color: var(--gray-700);
+}
+
+.section-empty-message p {
+  margin: 0;
+  line-height: 1.5;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .header-content {

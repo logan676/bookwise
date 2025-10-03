@@ -1,0 +1,29 @@
+@model BookWise.Web.Models.Book
+@{
+    var coverUrl = string.IsNullOrWhiteSpace(Model.CoverImageUrl)
+        ? Url.Content("~/img/book-placeholder.svg")
+        : Model.CoverImageUrl!;
+    var statusKey = Model.Status?.ToLowerInvariant();
+    var statusLabel = statusKey switch
+    {
+        "reading" => "In progress",
+        "read" => "Completed",
+        "plan-to-read" => "On deck",
+        _ => Model.Status ?? string.Empty
+    };
+}
+
+<a class="book-item" asp-page="/BookDetails" asp-route-id="@Model.Id">
+    <div class="book-cover">
+        <img src="@coverUrl" alt="@Model.Title cover" loading="lazy" />
+    </div>
+    <h3 class="book-title">@Model.Title</h3>
+    @if (!string.IsNullOrWhiteSpace(Model.Author))
+    {
+        <p class="book-author">@Model.Author</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(statusLabel))
+    {
+        <span class="book-status" data-status="@statusKey">@statusLabel</span>
+    }
+</a>
