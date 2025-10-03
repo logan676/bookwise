@@ -11,6 +11,13 @@
     <script src="~/js/site.js" asp-append-version="true" defer></script>
 </head>
 <body>
+    @{
+        var mainClass = "main-content";
+        if (ViewData.TryGetValue("MainClass", out var mainClassExtraObj) && mainClassExtraObj is string mainClassExtra && !string.IsNullOrWhiteSpace(mainClassExtra))
+        {
+            mainClass += $" {mainClassExtra}";
+        }
+    }
     <div class="app-shell">
         <header class="top-nav">
             <div class="nav-left">
@@ -28,8 +35,8 @@
                     <span class="brand-name">BookWise</span>
                 </a>
                 <nav class="nav-links" aria-label="Primary">
-                    <a class="nav-link active" asp-page="/Index">My Books</a>
-                    <a class="nav-link" href="#" data-disabled="true">Explore</a>
+                    <a class="nav-link" asp-page="/Index">My Books</a>
+                    <a class="nav-link" asp-page="/Explore">Explore</a>
                     <a class="nav-link" href="#" data-disabled="true">Community</a>
                 </nav>
             </div>
@@ -42,7 +49,7 @@
                 </button>
             </div>
         </header>
-        <main class="main-content" role="main">
+        <main class="@mainClass" role="main">
             @RenderBody()
         </main>
     </div>
