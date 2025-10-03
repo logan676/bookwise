@@ -193,25 +193,45 @@
                      role="tabpanel"
                      aria-labelledby="settings-tab-account"
                      data-tab-panel="account">
-                <div class="settings-section">
-                    <h2 class="settings-section-title">Account Security</h2>
-                    <p class="settings-section-description">Manage sign-in methods and account recovery options.</p>
-                    <div class="preference-stack">
-                        <article class="preference-card preference-card--inline">
-                            <div class="preference-copy">
-                                <h3 class="preference-title">Two-Factor Authentication</h3>
-                                <p class="preference-description">Add an extra layer of protection to your account.</p>
+                <div class="account-settings" aria-labelledby="account-settings-heading">
+                    <header class="account-settings__header">
+                        <h2 id="account-settings-heading" class="account-settings__title">Update Account Info</h2>
+                        <p class="account-settings__description">Modify your personal details and avatar.</p>
+                    </header>
+                    <div class="account-settings__content" role="group" aria-label="Account details">
+                        <div class="account-settings__avatar-block">
+                            <div class="account-settings__avatar">
+                                <img src="https://i.pravatar.cc/160?img=47" alt="Alex Cooper" />
+                                <button type="button"
+                                        class="account-settings__avatar-badge"
+                                        aria-label="Change avatar"
+                                        data-account-action="change-avatar">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M4 7H6L7.59 4.59C7.84369 4.218 8.2524 4 8.692 4H15.308C15.7476 4 16.1563 4.218 16.41 4.59L18 7H20C21.1046 7 22 7.89543 22 9V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V9C2 7.89543 2.89543 7 4 7Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                        <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                                    </svg>
+                                </button>
                             </div>
-                            <button type="button" class="preference-action" data-action="2fa">Enable</button>
-                        </article>
-                        <article class="preference-card preference-card--inline">
-                            <div class="preference-copy">
-                                <h3 class="preference-title">Connected Accounts</h3>
-                                <p class="preference-description">View and manage social accounts linked to BookWise.</p>
+                            <div class="account-settings__avatar-actions">
+                                <button type="button" class="account-settings__btn account-settings__btn--outline" data-account-action="change-photo">Change</button>
+                                <button type="button" class="account-settings__btn account-settings__btn--link" data-account-action="remove-photo">Remove</button>
                             </div>
-                            <button type="button" class="preference-action" data-action="connections">Manage</button>
-                        </article>
+                        </div>
+                        <div class="account-settings__fields">
+                            <div class="account-settings__field">
+                                <label class="account-settings__label" for="account-display-name">Display Name</label>
+                                <input class="account-settings__input" type="text" id="account-display-name" name="DisplayName" value="Alex Cooper" placeholder="Enter display name" />
+                            </div>
+                            <div class="account-settings__field">
+                                <label class="account-settings__label" for="account-email-address">Email Address</label>
+                                <input class="account-settings__input" type="email" id="account-email-address" name="Email" value="alex.cooper@example.com" placeholder="name@email.com" />
+                            </div>
+                        </div>
                     </div>
+                    <footer class="account-settings__footer">
+                        <button type="button" class="account-settings__btn account-settings__btn--ghost" data-account-action="cancel-changes">Cancel</button>
+                        <button type="button" class="account-settings__btn account-settings__btn--primary" data-account-action="save-changes">Save Changes</button>
+                    </footer>
                 </div>
             </section>
 
@@ -313,6 +333,34 @@
                     console.log('Action triggered:', label);
                 });
             });
+
+            const accountActionButtons = document.querySelectorAll('[data-account-action]');
+            accountActionButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    console.log('Account action triggered:', button.dataset.accountAction);
+                });
+            });
+
+            const saveButton = document.querySelector('[data-account-action="save-changes"]');
+            if (saveButton) {
+                const defaultLabel = saveButton.textContent.trim();
+
+                saveButton.addEventListener('click', () => {
+                    if (saveButton.dataset.state === 'pending') {
+                        return;
+                    }
+
+                    saveButton.dataset.state = 'pending';
+                    saveButton.disabled = true;
+                    saveButton.textContent = 'Saved';
+
+                    setTimeout(() => {
+                        saveButton.disabled = false;
+                        saveButton.textContent = defaultLabel;
+                        delete saveButton.dataset.state;
+                    }, 1600);
+                });
+            }
         });
     </script>
 }

@@ -400,61 +400,10 @@
       }
     });
 
-    const userMenuItems = document.querySelectorAll(".user-menu-item");
-    userMenuItems.forEach((item) => {
-      const itemPath =
-        item.getAttribute("href") || item.getAttribute("asp-page");
-      if (
-        itemPath === currentPath ||
-        (currentPath === "/Profile" && itemPath === "/Profile") ||
-        (currentPath === "/Settings" && itemPath === "/Settings")
-      ) {
-        item.classList.add("active");
-      }
-    });
-  }
-
-  function initUserMenu() {
-    const menu = document.querySelector(".user-menu");
-    if (!menu) {
-      return;
-    }
-
-    const toggle = menu.querySelector(".user-menu-toggle");
-    const updateAriaExpanded = () => {
-      if (!toggle) {
-        return;
-      }
-      toggle.setAttribute(
-        "aria-expanded",
-        menu.hasAttribute("open") ? "true" : "false"
-      );
-    };
-
-    updateAriaExpanded();
-    menu.addEventListener("toggle", updateAriaExpanded);
-
-    document.addEventListener("click", (event) => {
-      if (!menu.open) {
-        return;
-      }
-      if (menu.contains(event.target)) {
-        return;
-      }
-      menu.removeAttribute("open");
-    });
-
-    menu.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        menu.removeAttribute("open");
-        toggle?.focus();
-      }
-    });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     init();
     initNavigation();
-    initUserMenu();
   });
 })();
