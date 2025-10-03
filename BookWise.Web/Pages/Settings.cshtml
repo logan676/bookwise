@@ -2,218 +2,315 @@
 @model BookWise.Web.Pages.SettingsModel
 @{
     ViewData["Title"] = "Settings";
+    ViewData["MainClass"] = "main-content--wide";
 }
 
 <div class="settings-page">
-    <div class="settings-container">
-        <div class="settings-header">
+    <div class="settings-shell">
+        <header class="settings-header">
             <h1 class="settings-title">Settings</h1>
-        </div>
+            <nav class="settings-tabs" role="tablist" aria-label="Settings categories">
+                <button type="button"
+                        id="settings-tab-general"
+                        class="settings-tab is-active"
+                        role="tab"
+                        aria-selected="true"
+                        aria-controls="settings-panel-general"
+                        data-tab="general">
+                    General
+                </button>
+                <button type="button"
+                        id="settings-tab-appearance"
+                        class="settings-tab"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel-appearance"
+                        data-tab="appearance">
+                    Appearance
+                </button>
+                <button type="button"
+                        id="settings-tab-account"
+                        class="settings-tab"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel-account"
+                        data-tab="account">
+                    Account
+                </button>
+                <button type="button"
+                        id="settings-tab-notifications"
+                        class="settings-tab"
+                        role="tab"
+                        aria-selected="false"
+                        aria-controls="settings-panel-notifications"
+                        data-tab="notifications">
+                    Notifications
+                </button>
+            </nav>
+        </header>
 
-        <div class="settings-content">
-            <div class="settings-tabs">
-                <button class="settings-tab active" data-tab="general">General</button>
-                <button class="settings-tab" data-tab="appearance">Appearance</button>
-                <button class="settings-tab" data-tab="account">Account</button>
-                <button class="settings-tab" data-tab="notifications">Notifications</button>
-            </div>
-
-            <div class="settings-panels">
-                <!-- General Tab -->
-                <div class="settings-panel active" id="general-panel">
-                    <div class="settings-section">
-                        <div class="setting-group">
-                            <h3 class="setting-title">Language</h3>
-                            <div class="setting-control">
-                                <select class="setting-select" id="language-select">
-                                    <option value="en-US" selected>English (United States)</option>
-                                    <option value="en-GB">English (United Kingdom)</option>
-                                    <option value="es-ES">Español (España)</option>
-                                    <option value="fr-FR">Français (France)</option>
-                                    <option value="de-DE">Deutsch (Deutschland)</option>
-                                    <option value="it-IT">Italiano (Italia)</option>
-                                    <option value="pt-BR">Português (Brasil)</option>
-                                    <option value="ja-JP">日本語 (Japan)</option>
-                                    <option value="ko-KR">한국어 (Korea)</option>
-                                    <option value="zh-CN">中文 (简体)</option>
-                                </select>
-                                <svg class="dropdown-icon" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                </svg>
-                            </div>
+        <div class="settings-panels">
+            <section id="settings-panel-general"
+                     class="settings-panel is-active"
+                     role="tabpanel"
+                     aria-labelledby="settings-tab-general"
+                     data-tab-panel="general">
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Language</h2>
+                    <div class="settings-field">
+                        <label class="settings-field-label" for="language-select">Preferred language</label>
+                        <div class="settings-select">
+                            <select id="language-select" class="settings-select-control">
+                                <option value="en-US" selected>English (United States)</option>
+                                <option value="en-GB">English (United Kingdom)</option>
+                                <option value="es-ES">Español (España)</option>
+                                <option value="fr-FR">Français (France)</option>
+                                <option value="de-DE">Deutsch (Deutschland)</option>
+                                <option value="it-IT">Italiano (Italia)</option>
+                                <option value="pt-BR">Português (Brasil)</option>
+                                <option value="ja-JP">日本語 (日本)</option>
+                                <option value="ko-KR">한국어 (대한민국)</option>
+                                <option value="zh-CN">中文 (简体)</option>
+                            </select>
+                            <svg class="settings-select-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 10.954l3.71-3.724a.75.75 0 111.08 1.04l-4.24 4.258a1 1 0 01-1.42 0L5.25 8.27a.75.75 0 01-.02-1.06z" clip-rule="evenodd" />
+                            </svg>
                         </div>
                     </div>
                 </div>
 
-                <!-- Appearance Tab -->
-                <div class="settings-panel" id="appearance-panel">
-                    <div class="settings-section">
-                        <div class="setting-group">
-                            <h3 class="setting-title">Theme</h3>
-                            <div class="theme-options">
-                                <button class="theme-option active" data-theme="light">
-                                    <div class="theme-preview light-preview"></div>
-                                    <span class="theme-label">Light</span>
-                                </button>
-                                <button class="theme-option" data-theme="dark">
-                                    <div class="theme-preview dark-preview"></div>
-                                    <span class="theme-label">Dark</span>
-                                </button>
-                                <button class="theme-option" data-theme="system">
-                                    <div class="theme-preview system-preview"></div>
-                                    <span class="theme-label">System</span>
-                                </button>
-                            </div>
-                        </div>
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Theme</h2>
+                    <div class="theme-choice-group" role="radiogroup" aria-label="Theme">
+                        <button type="button" class="theme-choice is-active" data-theme="light" aria-pressed="true">Light</button>
+                        <button type="button" class="theme-choice" data-theme="dark" aria-pressed="false">Dark</button>
+                        <button type="button" class="theme-choice" data-theme="system" aria-pressed="false">System</button>
                     </div>
                 </div>
 
-                <!-- Account Tab -->
-                <div class="settings-panel" id="account-panel">
-                    <div class="settings-section">
-                        <div class="setting-group">
-                            <div class="account-item">
-                                <div class="account-info">
-                                    <h4 class="account-label">Password</h4>
-                                    <p class="account-description">Change your password</p>
-                                </div>
-                                <button class="account-action-btn">Change</button>
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Account</h2>
+                    <div class="preference-stack">
+                        <article class="preference-card">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Password</h3>
+                                <p class="preference-description">Change your password</p>
                             </div>
-                        </div>
-
-                        <div class="setting-group">
-                            <div class="account-item">
-                                <div class="account-info">
-                                    <h4 class="account-label">Email</h4>
-                                    <p class="account-description">Update your email address</p>
-                                </div>
-                                <button class="account-action-btn">Update</button>
+                            <button type="button" class="preference-action" data-action="password">Change</button>
+                        </article>
+                        <article class="preference-card">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Email</h3>
+                                <p class="preference-description">Update your email address</p>
                             </div>
-                        </div>
+                            <button type="button" class="preference-action" data-action="email">Update</button>
+                        </article>
                     </div>
                 </div>
 
-                <!-- Notifications Tab -->
-                <div class="settings-panel" id="notifications-panel">
-                    <div class="settings-section">
-                        <div class="setting-group">
-                            <div class="notification-item">
-                                <div class="notification-info">
-                                    <h4 class="notification-label">Email Notifications</h4>
-                                    <p class="notification-description">Receive email notifications about new features and updates.</p>
-                                </div>
-                                <div class="toggle-switch">
-                                    <input type="checkbox" id="email-notifications" class="toggle-input" checked>
-                                    <label for="email-notifications" class="toggle-label">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </div>
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Notifications</h2>
+                    <div class="preference-stack">
+                        <article class="preference-card preference-card--split">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Email Notifications</h3>
+                                <p class="preference-description">Receive email notifications about new features and updates.</p>
                             </div>
-                        </div>
-
-                        <div class="setting-group">
-                            <div class="notification-item">
-                                <div class="notification-info">
-                                    <h4 class="notification-label">Reading Reminders</h4>
-                                    <p class="notification-description">Get reminded about books you're currently reading.</p>
-                                </div>
-                                <div class="toggle-switch">
-                                    <input type="checkbox" id="reading-reminders" class="toggle-input">
-                                    <label for="reading-reminders" class="toggle-label">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </div>
+                            <div class="toggle-field">
+                                <input type="checkbox" id="email-notifications" class="toggle-input" checked>
+                                <label for="email-notifications" class="toggle-label">
+                                    <span class="toggle-slider"></span>
+                                </label>
                             </div>
-                        </div>
-
-                        <div class="setting-group">
-                            <div class="notification-item">
-                                <div class="notification-info">
-                                    <h4 class="notification-label">Book Recommendations</h4>
-                                    <p class="notification-description">Receive personalized book recommendations based on your reading history.</p>
-                                </div>
-                                <div class="toggle-switch">
-                                    <input type="checkbox" id="book-recommendations" class="toggle-input" checked>
-                                    <label for="book-recommendations" class="toggle-label">
-                                        <span class="toggle-slider"></span>
-                                    </label>
-                                </div>
+                        </article>
+                        <article class="preference-card preference-card--split">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Push Notifications</h3>
+                                <p class="preference-description">Stay in the loop with timely alerts on your devices.</p>
                             </div>
-                        </div>
+                            <div class="toggle-field">
+                                <input type="checkbox" id="push-notifications" class="toggle-input">
+                                <label for="push-notifications" class="toggle-label">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </article>
+                        <article class="preference-card preference-card--split">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Book Recommendations</h3>
+                                <p class="preference-description">Receive personalized suggestions based on your reading habits.</p>
+                            </div>
+                            <div class="toggle-field">
+                                <input type="checkbox" id="book-recommendations" class="toggle-input" checked>
+                                <label for="book-recommendations" class="toggle-label">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </article>
                     </div>
                 </div>
-            </div>
+            </section>
+
+            <section id="settings-panel-appearance"
+                     class="settings-panel"
+                     hidden
+                     role="tabpanel"
+                     aria-labelledby="settings-tab-appearance"
+                     data-tab-panel="appearance">
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Reader Appearance</h2>
+                    <p class="settings-section-description">Fine-tune how the reader looks and feels across devices.</p>
+                    <div class="preference-stack">
+                        <article class="preference-card preference-card--inline">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Font Size</h3>
+                                <p class="preference-description">Adjust global font sizes to match your comfort level.</p>
+                            </div>
+                            <div class="stepper">
+                                <button type="button" class="stepper-btn" data-step="down" aria-label="Decrease font size">−</button>
+                                <span class="stepper-value" aria-live="polite">Medium</span>
+                                <button type="button" class="stepper-btn" data-step="up" aria-label="Increase font size">＋</button>
+                            </div>
+                        </article>
+                        <article class="preference-card preference-card--inline">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Line Spacing</h3>
+                                <p class="preference-description">Choose a spacing option for comfortable long-form reading.</p>
+                            </div>
+                            <div class="theme-choice-group">
+                                <button type="button" class="theme-choice is-active" data-spacing="compact" aria-pressed="true">Compact</button>
+                                <button type="button" class="theme-choice" data-spacing="cozy" aria-pressed="false">Cozy</button>
+                                <button type="button" class="theme-choice" data-spacing="roomy" aria-pressed="false">Roomy</button>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section id="settings-panel-account"
+                     class="settings-panel"
+                     hidden
+                     role="tabpanel"
+                     aria-labelledby="settings-tab-account"
+                     data-tab-panel="account">
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Account Security</h2>
+                    <p class="settings-section-description">Manage sign-in methods and account recovery options.</p>
+                    <div class="preference-stack">
+                        <article class="preference-card preference-card--inline">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Two-Factor Authentication</h3>
+                                <p class="preference-description">Add an extra layer of protection to your account.</p>
+                            </div>
+                            <button type="button" class="preference-action" data-action="2fa">Enable</button>
+                        </article>
+                        <article class="preference-card preference-card--inline">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Connected Accounts</h3>
+                                <p class="preference-description">View and manage social accounts linked to BookWise.</p>
+                            </div>
+                            <button type="button" class="preference-action" data-action="connections">Manage</button>
+                        </article>
+                    </div>
+                </div>
+            </section>
+
+            <section id="settings-panel-notifications"
+                     class="settings-panel"
+                     hidden
+                     role="tabpanel"
+                     aria-labelledby="settings-tab-notifications"
+                     data-tab-panel="notifications">
+                <div class="settings-section">
+                    <h2 class="settings-section-title">Notification Schedule</h2>
+                    <p class="settings-section-description">Control how frequently we reach out to you.</p>
+                    <div class="preference-stack">
+                        <article class="preference-card preference-card--split">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Digest Emails</h3>
+                                <p class="preference-description">Receive a weekly summary of activity across your clubs and shelves.</p>
+                            </div>
+                            <div class="toggle-field">
+                                <input type="checkbox" id="digest-emails" class="toggle-input" checked>
+                                <label for="digest-emails" class="toggle-label">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </article>
+                        <article class="preference-card preference-card--split">
+                            <div class="preference-copy">
+                                <h3 class="preference-title">Quiet Hours</h3>
+                                <p class="preference-description">Mute notifications each night between 10:00 PM and 7:00 AM.</p>
+                            </div>
+                            <button type="button" class="preference-action" data-action="quiet-hours">Edit</button>
+                        </article>
+                    </div>
+                </div>
+            </section>
         </div>
     </div>
 </div>
 
 @section Scripts {
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Tab switching functionality
-            const tabs = document.querySelectorAll('.settings-tab');
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabButtons = document.querySelectorAll('.settings-tab');
             const panels = document.querySelectorAll('.settings-panel');
 
-            tabs.forEach(tab => {
-                tab.addEventListener('click', function() {
-                    const targetTab = this.dataset.tab;
-                    
-                    // Remove active class from all tabs and panels
-                    tabs.forEach(t => t.classList.remove('active'));
-                    panels.forEach(p => p.classList.remove('active'));
-                    
-                    // Add active class to clicked tab and corresponding panel
-                    this.classList.add('active');
-                    document.getElementById(targetTab + '-panel').classList.add('active');
+            tabButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const target = button.dataset.tab;
+
+                    tabButtons.forEach(tab => {
+                        tab.classList.toggle('is-active', tab === button);
+                        tab.setAttribute('aria-selected', tab === button ? 'true' : 'false');
+                    });
+
+                    panels.forEach(panel => {
+                        const isMatch = panel.dataset.tabPanel === target;
+                        panel.classList.toggle('is-active', isMatch);
+                        panel.toggleAttribute('hidden', !isMatch);
+                    });
                 });
             });
 
-            // Theme selection functionality
-            const themeOptions = document.querySelectorAll('.theme-option');
-            themeOptions.forEach(option => {
-                option.addEventListener('click', function() {
-                    themeOptions.forEach(opt => opt.classList.remove('active'));
-                    this.classList.add('active');
-                    
-                    const selectedTheme = this.dataset.theme;
-                    console.log('Theme changed to:', selectedTheme);
-                    // Here you would implement actual theme switching logic
+            const themeChoices = document.querySelectorAll('.theme-choice');
+            themeChoices.forEach(choice => {
+                choice.addEventListener('click', () => {
+                    const group = choice.closest('.theme-choice-group');
+                    const siblings = group.querySelectorAll('.theme-choice');
+
+                    siblings.forEach(btn => {
+                        btn.classList.toggle('is-active', btn === choice);
+                        btn.setAttribute('aria-pressed', btn === choice ? 'true' : 'false');
+                    });
+
+                    console.log('Preference changed:', choice.dataset.theme ?? choice.dataset.spacing);
                 });
             });
 
-            // Language selection
-            const languageSelect = document.getElementById('language-select');
-            languageSelect.addEventListener('change', function() {
-                console.log('Language changed to:', this.value);
-                // Here you would implement actual language switching logic
-            });
-
-            // Toggle switches
             const toggleInputs = document.querySelectorAll('.toggle-input');
-            toggleInputs.forEach(input => {
-                input.addEventListener('change', function() {
-                    console.log(this.id + ' changed to:', this.checked);
-                    // Here you would save the setting to the backend
+            toggleInputs.forEach(toggle => {
+                toggle.addEventListener('change', () => {
+                    console.log('Toggle changed:', toggle.id, toggle.checked);
                 });
             });
 
-            // Account action buttons
-            const actionButtons = document.querySelectorAll('.account-action-btn');
-            actionButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const action = this.textContent.toLowerCase();
-                    console.log('Account action:', action);
-                    // Here you would implement the actual action (open modal, navigate to form, etc.)
-                    
-                    // Temporary feedback
-                    const originalText = this.textContent;
-                    this.textContent = action === 'change' ? 'Changed!' : 'Updated!';
-                    this.style.background = '#22c55e';
-                    
+            const preferenceActions = document.querySelectorAll('.preference-action');
+            preferenceActions.forEach(button => {
+                const originalLabel = button.textContent.trim();
+
+                button.addEventListener('click', () => {
+                    const label = button.dataset.action ?? 'action';
+                    button.classList.add('is-active');
+                    button.textContent = 'Saved';
+
                     setTimeout(() => {
-                        this.textContent = originalText;
-                        this.style.background = '';
-                    }, 2000);
+                        button.classList.remove('is-active');
+                        button.textContent = originalLabel;
+                    }, 1600);
+
+                    console.log('Action triggered:', label);
                 });
             });
         });
