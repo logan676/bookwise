@@ -390,6 +390,7 @@
         (currentPath === "/" && (linkPath === "/Index" || linkPath === "/")) ||
         (currentPath === "/Index" && linkPath === "/Index") ||
         (currentPath === "/Explore" && linkPath === "/Explore") ||
+        (currentPath === "/Statistics" && linkPath === "/Statistics") ||
         (currentPath === "/Settings" && linkPath === "/Settings")
       ) {
         link.classList.add("active");
@@ -415,7 +416,10 @@
       if (!toggle) {
         return;
       }
-      toggle.setAttribute("aria-expanded", menu.hasAttribute("open") ? "true" : "false");
+      toggle.setAttribute(
+        "aria-expanded",
+        menu.hasAttribute("open") ? "true" : "false"
+      );
     };
 
     updateAriaExpanded();

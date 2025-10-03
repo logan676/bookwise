@@ -7,108 +7,245 @@
     var activeAuthor = Model.Authors.FirstOrDefault();
 }
 
-<div class="explore-page">
-    <aside class="authors-panel" aria-label="Authors">
-        <div class="authors-panel-header">
-            <h2>Authors</h2>
-        </div>
-        <ul class="author-list" role="tablist">
-            @foreach (var author in Model.Authors)
-            {
-                var isActive = author == activeAuthor;
-                var paneId = $"author-pane-{author.Slug}";
-                <li class="author-item @(isActive ? "is-active" : null)">
-                    <button type="button"
-                            id="tab-@author.Slug"
-                            class="author-button"
-                            role="tab"
-                            aria-controls="@paneId"
-                            aria-selected="@(isActive ? "true" : "false")"
-                            data-author="@author.Slug">
-                        <span class="author-avatar">
-                            <img src="@author.PhotoUrl"
-                                 alt="@author.Name"
-                                 loading="lazy" />
-                        </span>
-                        <span class="author-text">
-                            <span class="author-name">@author.Name</span>
-                            <span class="author-meta">@author.WorkCount @((author.WorkCount == 1) ? "work" : "works")</span>
-                        </span>
-                        <span class="author-count" aria-hidden="true">@author.WorkCount</span>
-                    </button>
-                </li>
-            }
-        </ul>
-    </aside>
+<div class="explore-shell">
+    <div class="explore-top-tabs" role="tablist" aria-label="Explore Modes">
+        <button type="button"
+                class="explore-top-tab is-active"
+                id="explore-tab-authors"
+                role="tab"
+                aria-controls="explore-pane-authors"
+                aria-selected="true"
+                data-explore-tab="authors">
+            Authors
+        </button>
+        <button type="button"
+                class="explore-top-tab"
+                id="explore-tab-quotes"
+                role="tab"
+                aria-controls="explore-pane-quotes"
+                aria-selected="false"
+                data-explore-tab="quotes">
+            Quotes
+        </button>
+    </div>
 
-    <section class="author-content">
-        @foreach (var author in Model.Authors)
-        {
-            var isActive = author == activeAuthor;
-            var paneId = $"author-pane-{author.Slug}";
-            <article id="@paneId"
-                     class="author-details-pane @(isActive ? "is-active" : null)"
-                     role="tabpanel"
-                     aria-labelledby="tab-@author.Slug"
-                     data-author="@author.Slug">
-                <header class="author-headline">
-                    <h1 class="author-display-name">@author.Name</h1>
-                    <p class="author-summary">@author.Summary</p>
+    <div class="explore-top-panels">
+        <section id="explore-pane-authors"
+                 class="explore-top-panel is-active"
+                 role="tabpanel"
+                 aria-labelledby="explore-tab-authors"
+                 data-explore-tab="authors">
+            <div class="explore-page">
+                <aside class="authors-panel" aria-label="Authors">
+                    <div class="authors-panel-header">
+                        <h2>Authors</h2>
+                    </div>
+                    <ul class="author-list" role="tablist">
+                        @foreach (var author in Model.Authors)
+                        {
+                            var isActive = author == activeAuthor;
+                            var paneId = $"author-pane-{author.Slug}";
+                            <li class="author-item @(isActive ? "is-active" : null)">
+                                <button type="button"
+                                        id="tab-@author.Slug"
+                                        class="author-button"
+                                        role="tab"
+                                        aria-controls="@paneId"
+                                        aria-selected="@(isActive ? "true" : "false")"
+                                        data-author="@author.Slug">
+                                    <span class="author-avatar">
+                                        <img src="@author.PhotoUrl"
+                                             alt="@author.Name"
+                                             loading="lazy" />
+                                    </span>
+                                    <span class="author-text">
+                                        <span class="author-name">@author.Name</span>
+                                        <span class="author-meta">@author.WorkCount @((author.WorkCount == 1) ? "work" : "works")</span>
+                                    </span>
+                                    <span class="author-count" aria-hidden="true">@author.WorkCount</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </aside>
+
+                <section class="author-content">
+                    @foreach (var author in Model.Authors)
+                    {
+                        var isActive = author == activeAuthor;
+                        var paneId = $"author-pane-{author.Slug}";
+                        <article id="@paneId"
+                                 class="author-details-pane @(isActive ? "is-active" : null)"
+                                 role="tabpanel"
+                                 aria-labelledby="tab-@author.Slug"
+                                 data-author="@author.Slug">
+                            <header class="author-headline">
+                                <h1 class="author-display-name">@author.Name</h1>
+                                <p class="author-summary">@author.Summary</p>
+                            </header>
+
+                            <section class="author-collection">
+                                <div class="collection-header">
+                                    <h2>Your Library</h2>
+                                    <p>Titles already on your shelf.</p>
+                                </div>
+                                <div class="author-book-strip" role="list">
+                                    @foreach (var book in author.Library)
+                                    {
+                                        <article class="author-book-card" role="listitem">
+                                            <div class="author-book-cover">
+                                                <img src="@book.CoverUrl"
+                                                     alt="@book.Title cover"
+                                                     loading="lazy" />
+                                            </div>
+                                            <div class="author-book-info">
+                                                <h3>@book.Title</h3>
+                                                <p>@book.Subtitle</p>
+                                            </div>
+                                        </article>
+                                    }
+                                </div>
+                            </section>
+
+                            <section class="author-collection">
+                                <div class="collection-header">
+                                    <h2>Available Works</h2>
+                                    <p>Explore more from this author.</p>
+                                </div>
+                                <div class="author-book-strip" role="list">
+                                    @foreach (var book in author.AvailableWorks)
+                                    {
+                                        <article class="author-book-card" role="listitem">
+                                            <div class="author-book-cover">
+                                                <img src="@book.CoverUrl"
+                                                     alt="@book.Title cover"
+                                                     loading="lazy" />
+                                            </div>
+                                            <div class="author-book-info">
+                                                <h3>@book.Title</h3>
+                                                <p>@book.Subtitle</p>
+                                            </div>
+                                        </article>
+                                    }
+                                </div>
+                            </section>
+                        </article>
+                    }
+                </section>
+            </div>
+        </section>
+
+        <section id="explore-pane-quotes"
+                 class="explore-top-panel"
+                 role="tabpanel"
+                 aria-labelledby="explore-tab-quotes"
+                 data-explore-tab="quotes"
+                 hidden>
+            <div class="quotes-page">
+                <header class="quotes-header">
+                    <p class="quotes-kicker">Favorite Quotes</p>
+                    <h1 class="quotes-title">Daily inspiration curated for you</h1>
                 </header>
 
-                <section class="author-collection">
-                    <div class="collection-header">
-                        <h2>Your Library</h2>
-                        <p>Titles already on your shelf.</p>
-                    </div>
-                    <div class="author-book-strip" role="list">
-                        @foreach (var book in author.Library)
-                        {
-                            <article class="author-book-card" role="listitem">
-                                <div class="author-book-cover">
-                                    <img src="@book.CoverUrl"
-                                         alt="@book.Title cover"
-                                         loading="lazy" />
-                                </div>
-                                <div class="author-book-info">
-                                    <h3>@book.Title</h3>
-                                    <p>@book.Subtitle</p>
-                                </div>
-                            </article>
-                        }
-                    </div>
+                <section class="quote-feature">
+                    <h2 class="quote-section-heading">Quote of the Day</h2>
+                    <article class="quote-hero"
+                             style="@(string.IsNullOrEmpty(Model.QuoteOfTheDay.BackgroundImageUrl) ? null : $"background-image: url('{Model.QuoteOfTheDay.BackgroundImageUrl}')")">
+                        <div class="quote-hero-overlay">
+                            <svg class="quote-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M8.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 11.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 6 13.25V12a7 7 0 0 1 2.5-5.37V5zM17.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 20.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 15 13.25V12a7 7 0 0 1 2.5-5.37V5z" fill="currentColor" />
+                            </svg>
+                            <blockquote class="quote-hero-text">@Model.QuoteOfTheDay.Text</blockquote>
+                            @if (!string.IsNullOrWhiteSpace(Model.QuoteOfTheDay.Source))
+                            {
+                                <p class="quote-hero-source">@Model.QuoteOfTheDay.Source</p>
+                            }
+                            <footer class="quote-hero-footer">
+                                <cite>@Model.QuoteOfTheDay.Author</cite>
+                                <button type="button" class="quote-share" aria-label="Share quote of the day">
+                                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M18 8.5a2.5 2.5 0 1 0-2.38-3.2l-7.01 3.5a2.5 2.5 0 0 0-1.61-.6A2.5 2.5 0 1 0 9.5 11c.57 0 1.09-.19 1.51-.5l6.98 3.49a2.5 2.5 0 1 0 .53-1.47l-6.99-3.49a2.5 2.5 0 0 0 .03-.53c0-.18-.02-.35-.06-.51l7-3.5c.37.31.84.51 1.35.51Z" fill="currentColor" />
+                                    </svg>
+                                </button>
+                            </footer>
+                        </div>
+                    </article>
                 </section>
 
-                <section class="author-collection">
-                    <div class="collection-header">
-                        <h2>Available Works</h2>
-                        <p>Explore more from this author.</p>
+                <section class="quotes-collection">
+                    <div class="quotes-collection-header">
+                        <h2 class="quote-section-heading">All Quotes</h2>
+                        <p>Save your favorites and revisit them anytime.</p>
                     </div>
-                    <div class="author-book-strip" role="list">
-                        @foreach (var book in author.AvailableWorks)
+                    <div class="quotes-grid">
+                        @foreach (var quote in Model.Quotes)
                         {
-                            <article class="author-book-card" role="listitem">
-                                <div class="author-book-cover">
-                                    <img src="@book.CoverUrl"
-                                         alt="@book.Title cover"
-                                         loading="lazy" />
-                                </div>
-                                <div class="author-book-info">
-                                    <h3>@book.Title</h3>
-                                    <p>@book.Subtitle</p>
-                                </div>
+                            <article class="quote-card">
+                                <svg class="quote-card-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                    <path d="M8.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 11.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 6 13.25V12a7 7 0 0 1 2.5-5.37V5zM17.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 20.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 15 13.25V12a7 7 0 0 1 2.5-5.37V5z" fill="currentColor" />
+                                </svg>
+                                <p class="quote-card-text">@quote.Text</p>
+                                <footer class="quote-card-footer">
+                                    <cite>@quote.Author</cite>
+                                    @if (!string.IsNullOrWhiteSpace(quote.Source))
+                                    {
+                                        <span class="quote-card-source">@quote.Source</span>
+                                    }
+                                </footer>
+                                <button type="button" class="quote-card-share" aria-label="Share quote from @quote.Author">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                        <path d="M18 8.5a2.5 2.5 0 1 0-2.38-3.2l-7.01 3.5a2.5 2.5 0 0 0-1.61-.6A2.5 2.5 0 1 0 9.5 11c.57 0 1.09-.19 1.51-.5l6.98 3.49a2.5 2.5 0 1 0 .53-1.47l-6.99-3.49a2.5 2.5 0 0 0 .03-.53c0-.18-.02-.35-.06-.51l7-3.5c.37.31.84.51 1.35.51Z" fill="currentColor" />
+                                    </svg>
+                                </button>
                             </article>
                         }
                     </div>
                 </section>
-            </article>
-        }
-    </section>
+            </div>
+        </section>
+    </div>
 </div>
 
 @section Scripts {
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const exploreTabs = Array.from(document.querySelectorAll('.explore-top-tab'));
+            const explorePanels = Array.from(document.querySelectorAll('.explore-top-panel'));
+
+            const syncPanels = (target) => {
+                exploreTabs.forEach((btn) => {
+                    const isActive = btn.dataset.exploreTab === target;
+                    btn.classList.toggle('is-active', isActive);
+                    btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+
+                explorePanels.forEach((panel) => {
+                    const isActive = panel.dataset.exploreTab === target;
+                    panel.classList.toggle('is-active', isActive);
+                    if (isActive) {
+                        panel.removeAttribute('hidden');
+                    } else {
+                        panel.setAttribute('hidden', 'hidden');
+                    }
+                });
+            };
+
+            const initialTab = exploreTabs.find((tab) => tab.classList.contains('is-active'))?.dataset.exploreTab ?? exploreTabs[0]?.dataset.exploreTab;
+            if (initialTab) {
+                syncPanels(initialTab);
+            }
+
+            exploreTabs.forEach((tab) => {
+                tab.addEventListener('click', () => {
+                    const target = tab.dataset.exploreTab;
+                    if (!target) {
+                        return;
+                    }
+
+                    syncPanels(target);
+                });
+            });
+
             const authorButtons = Array.from(document.querySelectorAll('.author-button'));
             const panes = Array.from(document.querySelectorAll('.author-details-pane'));
 

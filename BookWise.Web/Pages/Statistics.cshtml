@@ -1,0 +1,174 @@
+@page
+@model BookWise.Web.Pages.StatisticsModel
+@{
+    ViewData["Title"] = "Book Statistics";
+}
+
+<div class="statistics-page">
+    <div class="statistics-header">
+        <h1 class="statistics-title">Book Statistics</h1>
+    </div>
+
+    <div class="statistics-content">
+        <!-- Filter Tabs -->
+        <div class="filter-section">
+            <div class="filter-label">Filter by Status:</div>
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-status="all">All</button>
+                <button class="filter-tab" data-status="in-reading">In Reading</button>
+                <button class="filter-tab" data-status="already-read">Already Read</button>
+                <button class="filter-tab" data-status="plan-to-read">Plan to Read</button>
+            </div>
+        </div>
+
+        <!-- Main Statistics Section -->
+        <div class="stats-main">
+            <!-- Genre Distribution Card -->
+            <div class="stats-card genre-card">
+                <div class="card-header">
+                    <h2 class="card-title">Genre Distribution</h2>
+                    <p class="card-subtitle">Your reading habits at a glance.</p>
+                </div>
+                <div class="card-content">
+                    <div class="total-books-display">
+                        <div class="total-books-number">@Model.TotalBooks</div>
+                        <div class="total-books-label">Total Books</div>
+                    </div>
+                    
+                    <div class="genre-list">
+                        @if (Model.GenreStats.Any())
+                        {
+                            @foreach (var genre in Model.GenreStats.Take(5))
+                            {
+                                <div class="genre-item">
+                                    <div class="genre-info">
+                                        <span class="genre-name">@genre.Genre</span>
+                                        <span class="genre-count">@genre.Count books</span>
+                                    </div>
+                                    <div class="genre-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: @(genre.Percentage)%"></div>
+                                        </div>
+                                        <span class="genre-percentage">@genre.Percentage%</span>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty-state">
+                                <p>No books with categories found.</p>
+                                <p>Start adding books with categories to see your reading distribution!</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reading Status Overview -->
+            <div class="stats-card status-card">
+                <div class="card-header">
+                    <h2 class="card-title">Reading Status</h2>
+                    <p class="card-subtitle">Track your reading progress</p>
+                </div>
+                <div class="card-content">
+                    <div class="status-grid">
+                        <div class="status-item in-reading">
+                            <div class="status-icon">📚</div>
+                            <div class="status-number">@Model.InReadingBooks</div>
+                            <div class="status-label">In Reading</div>
+                        </div>
+                        <div class="status-item already-read">
+                            <div class="status-icon">✅</div>
+                            <div class="status-number">@Model.AlreadyReadBooks</div>
+                            <div class="status-label">Already Read</div>
+                        </div>
+                        <div class="status-item plan-to-read">
+                            <div class="status-icon">📋</div>
+                            <div class="status-number">@Model.PlanToReadBooks</div>
+                            <div class="status-label">Plan to Read</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Stats -->
+        <div class="stats-secondary">
+            <div class="stats-card reading-insights">
+                <div class="card-header">
+                    <h2 class="card-title">Reading Insights</h2>
+                </div>
+                <div class="card-content">
+                    <div class="insights-grid">
+                        <div class="insight-item">
+                            <div class="insight-value">@(Model.GenreStats.Count)</div>
+                            <div class="insight-label">Different Genres</div>
+                        </div>
+                        <div class="insight-item">
+                            <div class="insight-value">@(Model.GenreStats.FirstOrDefault()?.Genre ?? "None")</div>
+                            <div class="insight-label">Top Genre</div>
+                        </div>
+                        <div class="insight-item">
+                            <div class="insight-value">@Math.Round((double)Model.AlreadyReadBooks / Math.Max(Model.TotalBooks, 1) * 100, 1)%</div>
+                            <div class="insight-label">Completion Rate</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="statistics-footer">
+        <p>&copy; 2024 BookWise. All rights reserved.</p>
+    </footer>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Filter tab functionality
+            const filterTabs = document.querySelectorAll('.filter-tab');
+            
+            filterTabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remove active class from all tabs
+                    filterTabs.forEach(t => t.classList.remove('active'));
+                    
+                    // Add active class to clicked tab
+                    this.classList.add('active');
+                    
+                    const status = this.dataset.status;
+                    console.log('Filter changed to:', status);
+                    
+                    // Here you could implement actual filtering logic
+                    // For now, we'll just provide visual feedback
+                    updateStatsDisplay(status);
+                });
+            });
+            
+            function updateStatsDisplay(status) {
+                // This function could update the display based on the selected filter
+                // For demonstration, we'll just add a visual effect
+                const statsCards = document.querySelectorAll('.stats-card');
+                statsCards.forEach(card => {
+                    card.style.opacity = '0.7';
+                    setTimeout(() => {
+                        card.style.opacity = '1';
+                    }, 200);
+                });
+            }
+            
+            // Add animation to progress bars
+            const progressBars = document.querySelectorAll('.progress-fill');
+            progressBars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0%';
+                setTimeout(() => {
+                    bar.style.width = width;
+                }, 100);
+            });
+        });
+    </script>
+}

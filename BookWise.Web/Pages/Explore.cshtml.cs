@@ -6,11 +6,14 @@ namespace BookWise.Web.Pages
     public class ExploreModel : PageModel
     {
         public IReadOnlyList<AuthorProfile> Authors { get; private set; } = new List<AuthorProfile>();
+        public QuoteCard QuoteOfTheDay { get; private set; } = QuoteCard.Empty;
+        public IReadOnlyList<QuoteCard> Quotes { get; private set; } = new List<QuoteCard>();
 
         public void OnGet()
         {
             ViewData["Title"] = "Explore";
             Authors = BuildAuthors();
+            (QuoteOfTheDay, Quotes) = BuildQuotes();
         }
 
         private static IReadOnlyList<AuthorProfile> BuildAuthors()
@@ -154,6 +157,50 @@ namespace BookWise.Web.Pages
             };
         }
 
+        private static (QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteCard> Quotes) BuildQuotes()
+        {
+            var quoteOfTheDay = new QuoteCard
+            {
+                Text = "The only way to do great work is to love what you do.",
+                Author = "Steve Jobs",
+                Source = "From 'The Innovator's Dilemma' by Clayton Christensen",
+                BackgroundImageUrl = "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=1600&q=80"
+            };
+
+            var quotes = new List<QuoteCard>
+            {
+                new()
+                {
+                    Text = "The greatest glory in living lies not in never falling, but in rising every time we fall.",
+                    Author = "Nelson Mandela",
+                    Source = "Long Walk to Freedom"
+                },
+                new()
+                {
+                    Text = "The way to get started is to quit talking and begin doing.",
+                    Author = "Walt Disney"
+                },
+                new()
+                {
+                    Text = "Your time is limited, so don't waste it living someone else's life.",
+                    Author = "Steve Jobs",
+                    Source = "Stanford Commencement"
+                },
+                new()
+                {
+                    Text = "It always seems impossible until it's done.",
+                    Author = "Nelson Mandela"
+                },
+                new()
+                {
+                    Text = "Imagination is more important than knowledge.",
+                    Author = "Albert Einstein"
+                }
+            };
+
+            return (quoteOfTheDay, quotes);
+        }
+
         private static string CoverById(int coverId) => $"https://covers.openlibrary.org/b/id/{coverId}-L.jpg";
 
         public class AuthorProfile
@@ -172,6 +219,16 @@ namespace BookWise.Web.Pages
             public string Title { get; init; } = string.Empty;
             public string Subtitle { get; init; } = string.Empty;
             public string CoverUrl { get; init; } = string.Empty;
+        }
+
+        public class QuoteCard
+        {
+            public static QuoteCard Empty { get; } = new();
+
+            public string Text { get; init; } = string.Empty;
+            public string Author { get; init; } = string.Empty;
+            public string? Source { get; init; }
+            public string? BackgroundImageUrl { get; init; }
         }
     }
 }
