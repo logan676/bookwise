@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="450" viewBox="0 0 300 450" role="img" aria-labelledby="title desc">
+  <title id="title">Book cover placeholder</title>
+  <desc id="desc">A stylized book cover placeholder with subtle gradients</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dbeafe" />
+      <stop offset="100%" stop-color="#eff6ff" />
+    </linearGradient>
+    <linearGradient id="stripe" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.35" />
+      <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.65" />
+    </linearGradient>
+  </defs>
+  <rect width="300" height="450" fill="url(#bg)" rx="16" ry="16" />
+  <rect x="48" y="72" width="36" height="306" fill="url(#stripe)" rx="8" ry="8" />
+  <rect x="108" y="112" width="132" height="12" fill="#60a5fa" opacity="0.65" />
+  <rect x="108" y="148" width="132" height="12" fill="#60a5fa" opacity="0.45" />
+  <rect x="108" y="184" width="96" height="12" fill="#60a5fa" opacity="0.3" />
+  <rect x="108" y="308" width="96" height="12" fill="#1d4ed8" opacity="0.4" />
+</svg>
