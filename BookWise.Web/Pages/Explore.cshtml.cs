@@ -34,6 +34,8 @@ namespace BookWise.Web.Pages
             Authors = await LoadAuthorsAsync(cancellationToken);
             (QuoteOfTheDay, Quotes) = await LoadQuotesAsync(cancellationToken);
             RecommendedAuthors = await LoadRecommendedAuthorsAsync(cancellationToken);
+            RecommendedSeries = await LoadRecommendedSeriesAsync(cancellationToken);
+            RecommendedAdaptations = await LoadRecommendedAdaptationsAsync(cancellationToken);
         }
 
         private async Task<IReadOnlyList<AuthorProfile>> LoadAuthorsAsync(CancellationToken cancellationToken)
@@ -95,6 +97,7 @@ namespace BookWise.Web.Pages
                 return Array.Empty<RecommendedAuthor>();
             }
 
+            // Order by GeneratedAt on the client side to avoid SQLite DateTimeOffset ordering issues
             var prioritized = recommendations
                 .OrderByDescending(r => r.ConfidenceScore ?? 0m)
                 .ThenByDescending(r => r.GeneratedAt)
@@ -116,18 +119,36 @@ namespace BookWise.Web.Pages
             return grouped;
         }
 
+        private async Task<IReadOnlyList<RecommendedSeriesItem>> LoadRecommendedSeriesAsync(CancellationToken cancellationToken)
+        {
+            // For now, return empty list as there's no data source for series recommendations
+            await Task.CompletedTask;
+            return Array.Empty<RecommendedSeriesItem>();
+        }
+
+        private async Task<IReadOnlyList<RecommendedAdaptation>> LoadRecommendedAdaptationsAsync(CancellationToken cancellationToken)
+        {
+            // For now, return empty list as there's no data source for adaptation recommendations
+            await Task.CompletedTask;
+            return Array.Empty<RecommendedAdaptation>();
+        }
+
         private async Task<(QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteCard> Quotes)> LoadQuotesAsync(CancellationToken cancellationToken)
         {
             var quoteEntities = await _context.BookQuotes
                 .AsNoTracking()
                 .Include(q => q.Book)
-                .OrderByDescending(q => q.AddedOn)
                 .ToListAsync(cancellationToken);
 
             if (quoteEntities.Count == 0)
             {
                 return (QuoteCard.Empty, Array.Empty<QuoteCard>());
             }
+
+            // Order by AddedOn on the client side to avoid SQLite DateTimeOffset ordering issues
+            quoteEntities = quoteEntities
+                .OrderByDescending(q => q.AddedOn)
+                .ToList();
 
             var cards = quoteEntities
                 .Select(q => new QuoteCard
