@@ -61,18 +61,54 @@
                 </header>
 
                 <div class="remark-list">
-                    @foreach (var remark in book.Remarks)
+                    @if (book.MyRemarks.Any())
                     {
-                        <article class="remark-card">
-                            <header class="remark-header">
-                                <div class="remark-icon" aria-hidden="true"></div>
-                                <div class="remark-meta">
-                                    <h3 class="remark-title">@remark.Title</h3>
-                                    <p class="remark-date">Added on @remark.AddedOn.ToString("MMMM d, yyyy")</p>
-                                </div>
-                            </header>
-                            <p class="remark-body">@remark.Content</p>
-                        </article>
+                        foreach (var remark in book.MyRemarks)
+                        {
+                            <article class="remark-card">
+                                <header class="remark-header">
+                                    <div class="remark-icon" aria-hidden="true"></div>
+                                    <div class="remark-meta">
+                                        <h3 class="remark-title">@remark.Title</h3>
+                                        <p class="remark-date">Added on @remark.AddedOn.ToString("MMMM d, yyyy")</p>
+                                    </div>
+                                </header>
+                                <p class="remark-body">@remark.Content</p>
+                            </article>
+                        }
+                    }
+                    else
+                    {
+                        <p class="remark-empty">You haven't added any personal remarks yet.</p>
+                    }
+                </div>
+            </section>
+
+            <section class="book-panel">
+                <header class="book-panel-header">
+                    <h2>Community Remarks</h2>
+                </header>
+
+                <div class="remark-list">
+                    @if (book.CommunityRemarks.Any())
+                    {
+                        foreach (var remark in book.CommunityRemarks)
+                        {
+                            <article class="remark-card">
+                                <header class="remark-header">
+                                    <div class="remark-icon remark-icon--community" aria-hidden="true"></div>
+                                    <div class="remark-meta">
+                                        <h3 class="remark-title">@remark.Title</h3>
+                                        <p class="remark-date">Added on @remark.AddedOn.ToString("MMMM d, yyyy")</p>
+                                    </div>
+                                </header>
+                                <p class="remark-body">@remark.Content</p>
+                            </article>
+                        }
+                    }
+                    else
+                    {
+                        <p class="remark-empty">No community remarks recorded.</p>
                     }
                 </div>
             </section>

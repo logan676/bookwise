@@ -1,4 +1,5 @@
 using BookWise.Web.Data;
+using BookWise.Web.Models;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +22,10 @@ public class BookDetailsModel : PageModel
 
         if (id.HasValue)
         {
-            var entity = await _context.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id.Value);
+            var entity = await _context.Books
+                .AsNoTracking()
+                .Include(b => b.Remarks)
+                .FirstOrDefaultAsync(b => b.Id == id.Value);
             if (entity is not null)
             {
                 detail.Title = string.IsNullOrWhiteSpace(entity.Title) ? detail.Title : entity.Title;
@@ -43,6 +47,27 @@ public class BookDetailsModel : PageModel
                 if (entity.Rating.HasValue)
                 {
                     detail.Rating = entity.Rating.Value;
+                }
+
+                if (entity.Remarks?.Count > 0)
+                {
+                    detail.MyRemarks = entity.Remarks
+                        .Where(r => r.Type == BookRemarkType.Mine)
+                        .OrderByDescending(r => r.AddedOn)
+                        .Select(r => new BookRemarkViewModel(
+                            r.Title ?? "Personal Remark",
+                            r.AddedOn.UtcDateTime,
+                            r.Content))
+                        .ToList();
+
+                    detail.CommunityRemarks = entity.Remarks
+                        .Where(r => r.Type == BookRemarkType.Community)
+                        .OrderByDescending(r => r.AddedOn)
+                        .Select(r => new BookRemarkViewModel(
+                            r.Title ?? "Community Remark",
+                            r.AddedOn.UtcDateTime,
+                            r.Content))
+                        .ToList();
                 }
             }
         }
@@ -68,9 +93,10 @@ public class BookDetailViewModel
         = "This book was a thrilling read! The plot twists kept me guessing until the very end.";
     public decimal? Rating { get; set; }
         = null;
-    public List<BookRemark> Remarks { get; private set; } = new();
-    public List<BookQuote> Quotes { get; private set; } = new();
-    public List<BookStatusEntry> StatusHistory { get; private set; } = new();
+    public List<BookRemarkViewModel> MyRemarks { get; set; } = new();
+    public List<BookRemarkViewModel> CommunityRemarks { get; set; } = new();
+    public List<BookQuote> Quotes { get; set; } = new();
+    public List<BookStatusEntry> StatusHistory { get; set; } = new();
 
     public string PublishedOnDisplay => PublishedOn == DateTime.MinValue
         ? "-"
@@ -88,12 +114,19 @@ public class BookDetailViewModel
             PublishedOn = new DateTime(2022, 1, 15),
             Language = "English",
             PageCount = 320,
-            Remarks = new List<BookRemark>
+            MyRemarks = new List<BookRemarkViewModel>
             {
                 new(
                     "My Thoughts",
                     new DateTime(2023, 3, 10),
-                    "This book was a thrilling read! The plot twists kept me guessing until the very end. Highly recommend for mystery lovers." )
+                    "This book was a thrilling read! The plot twists kept me guessing until the very end. Highly recommend for mystery lovers.")
+            },
+            CommunityRemarks = new List<BookRemarkViewModel>
+            {
+                new(
+                    "Staff Recommendation",
+                    new DateTime(2023, 3, 9),
+                    "Our local book club loved discussing the intricate motives in chapter twelve.")
             },
             Quotes = new List<BookQuote>
             {
@@ -110,7 +143,7 @@ public class BookDetailViewModel
     }
 }
 
-public record BookRemark(string Title, DateTime AddedOn, string Content);
+public record BookRemarkViewModel(string Title, DateTime AddedOn, string Content);
 
 public record BookQuote(string Text, DateTime AddedOn);
 

@@ -18,6 +18,11 @@
                        placeholder="Search for a book by title or author..." 
                        class="search-input" 
                        autocomplete="off" />
+                <label class="sr-only" for="search-mode">Search scope</label>
+                <select id="search-mode" class="search-mode-select">
+                    <option value="title" selected>Title</option>
+                    <option value="author">Author</option>
+                </select>
                 <button type="button" class="search-submit" id="execute-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"/>
@@ -93,6 +98,35 @@
             <p class="status-modal-book" id="status-modal-book"></p>
         </header>
         <div class="status-modal-options" id="reading-status-options"></div>
+        <div class="status-modal-form-group">
+            <label for="book-rating" class="status-modal-label">Rating (optional)</label>
+            <input type="number"
+                   id="book-rating"
+                   class="status-modal-input"
+                   name="book-rating"
+                   min="0"
+                   max="5"
+                   step="0.5"
+                   inputmode="decimal"
+                   placeholder="e.g. 4.5" />
+            <p class="status-modal-helper">Use a value between 0 and 5 to capture your first impression.</p>
+        </div>
+        <div class="status-modal-form-group">
+            <label for="remark-content" class="status-modal-label">Personal remark (optional)</label>
+            <input type="text"
+                   id="remark-title"
+                   class="status-modal-input"
+                   name="remark-title"
+                   maxlength="200"
+                   placeholder="Give your remark a short title (optional)" />
+            <textarea id="remark-content"
+                      class="status-modal-textarea"
+                      name="remark-content"
+                      maxlength="4000"
+                      rows="4"
+                      placeholder="Capture any thoughts you'd like to remember when you revisit this book."></textarea>
+            <p class="status-modal-helper">Remark is saved privately to your library and can be edited later.</p>
+        </div>
         <footer class="status-modal-footer">
             <span class="status-modal-feedback" id="status-modal-feedback" role="alert"></span>
             <button type="button" class="status-modal-submit" id="confirm-add-book">
@@ -107,6 +141,7 @@
         // Search functionality
         const searchInput = document.getElementById('book-search');
         const searchButton = document.getElementById('execute-search');
+        const searchModeSelect = document.getElementById('search-mode');
         const emptyState = document.getElementById('empty-state');
         const searchResults = document.getElementById('search-results');
         const resultsList = document.getElementById('results-list');
@@ -123,6 +158,9 @@
         const statusModalBook = document.getElementById('status-modal-book');
         const statusModalFeedback = document.getElementById('status-modal-feedback');
         const confirmAddButton = document.getElementById('confirm-add-book');
+        const ratingInput = document.getElementById('book-rating');
+        const remarkTitleInput = document.getElementById('remark-title');
+        const remarkContentInput = document.getElementById('remark-content');
 
         const readingStatusOptions = [
             {
@@ -165,6 +203,14 @@
         });
 
         searchButton.addEventListener('click', handleSearch);
+
+        searchModeSelect?.addEventListener('change', () => {
+            const mode = resolveSearchMode();
+            logActivity('Search mode updated', {
+                details: { searchBy: mode },
+                variant: 'info'
+            });
+        });
 
         clearLogButton?.addEventListener('click', resetActivityLog);
 
@@ -290,6 +336,7 @@
             selectedStatus = readingStatusOptions[0]?.value ?? 'plan-to-read';
 
             clearModalFeedback();
+            resetSupplementaryFields();
 
             if (statusModalBook) {
                 statusModalBook.textContent = `${book.title} · ${book.author}`;
@@ -323,6 +370,7 @@
             statusModal.setAttribute('hidden', 'hidden');
             document.body.classList.remove('modal-open');
             selectedBook = null;
+            resetSupplementaryFields();
         }
 
         function isModalOpen() {
@@ -362,7 +410,18 @@
                 return;
             }
 
-            const payload = buildBookPayload(selectedBook, selectedStatus);
+            const { value: ratingValue, error: ratingError } = tryParseRating();
+            if (ratingError) {
+                setModalFeedback(ratingError, 'error');
+                return;
+            }
+
+            const remarkPayload = buildRemarkPayload();
+
+            const payload = buildBookPayload(selectedBook, selectedStatus, {
+                rating: ratingValue,
+                remark: remarkPayload
+            });
 
             if (!payload.title || !payload.author) {
                 setModalFeedback('We need a title and author to add this book.', 'error');
@@ -445,15 +504,18 @@
             }
         }
 
-        function buildBookPayload(book, status) {
+        function buildBookPayload(book, status, extras = {}) {
             const normalizedStatus = (status ?? readingStatusOptions[0]?.value ?? 'plan-to-read')
                 .toString()
                 .trim()
                 .toLowerCase();
             const title = (book.title ?? '').trim();
             const author = (book.author ?? '').trim();
+            const rating = typeof extras.rating === 'number'
+                ? Number(extras.rating.toFixed(1))
+                : null;
 
-            return {
+            const payload = {
                 title,
                 author,
                 description: book.description ? book.description.trim() : null,
@@ -461,8 +523,72 @@
                 category: book.category ? book.category.trim() : null,
                 status: normalizedStatus,
                 isFavorite: false,
-                rating: null
+                rating
             };
+
+            if (extras.remark) {
+                payload.remarks = [extras.remark];
+            }
+
+            return payload;
+        }
+
+        function resolveSearchMode() {
+            return searchModeSelect?.value === 'author' ? 'author' : 'title';
+        }
+
+        function tryParseRating() {
+            if (!ratingInput) {
+                return { value: null, error: null };
+            }
+
+            const raw = ratingInput.value.trim();
+            if (!raw) {
+                return { value: null, error: null };
+            }
+
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed)) {
+                return { value: null, error: 'Enter a numeric rating between 0 and 5.' };
+            }
+
+            if (parsed < 0 || parsed > 5) {
+                return { value: null, error: 'Rating must be between 0 and 5.' };
+            }
+
+            const rounded = Math.round(parsed * 10) / 10;
+            return { value: rounded, error: null };
+        }
+
+        function buildRemarkPayload() {
+            if (!remarkContentInput) {
+                return null;
+            }
+
+            const content = remarkContentInput.value.trim();
+            if (!content) {
+                return null;
+            }
+
+            const title = remarkTitleInput?.value.trim();
+            return {
+                title: title ? title : null,
+                content
+            };
+        }
+
+        function resetSupplementaryFields() {
+            if (ratingInput) {
+                ratingInput.value = '';
+            }
+
+            if (remarkTitleInput) {
+                remarkTitleInput.value = '';
+            }
+
+            if (remarkContentInput) {
+                remarkContentInput.value = '';
+            }
         }
 
         async function handleSearch() {
@@ -472,22 +598,25 @@
                 return;
             }
 
+            const searchBy = resolveSearchMode();
+            const isAuthorSearch = searchBy === 'author';
+
             searchButton.disabled = true;
             emptyState.style.display = 'none';
             searchResults.style.display = 'block';
             resultsList.innerHTML = '';
-            setFeedback('Searching for books...');
+            setFeedback(isAuthorSearch ? 'Searching for books by author...' : 'Searching for books...');
 
             try {
                 logActivity('Search submitted', {
-                    details: { query },
+                    details: { query, searchBy },
                     variant: 'info'
                 });
                 logActivity('Dispatching request', {
                     details: {
                         method: 'POST',
                         url: '/api/book-search',
-                        payload: { query }
+                        payload: { query, searchBy }
                     },
                     variant: 'info'
                 });
@@ -497,11 +626,11 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ query })
+                    body: JSON.stringify({ query, searchBy })
                 });
 
                 if (!response.ok) {
-                    await reportResponseError(response, query);
+                    await reportResponseError(response, query, searchBy);
                     return;
                 }
 
@@ -513,6 +642,7 @@
                         status: response.status,
                         statusText: response.statusText,
                         totalBooks: books.length,
+                        searchBy,
                         sample: books.slice(0, 3).map((book) => ({
                             title: book.title,
                             author: book.author,
@@ -524,17 +654,22 @@
 
                 if (books.length === 0) {
                     logActivity('No matching books found', {
-                        details: { query },
+                        details: { query, searchBy },
                         variant: 'warning'
                     });
-                    setFeedback('No matching books found. Try a different keyword.', 'error');
+                    setFeedback(
+                        isAuthorSearch
+                            ? 'No books found for that author. Try a different name.'
+                            : 'No matching books found. Try a different keyword.',
+                        'error');
                     return;
                 }
 
                 setFeedback(`Showing ${books.length} suggestion${books.length === 1 ? '' : 's'}.`, 'success');
                 logActivity('Suggestions ready', {
                     details: {
-                        count: books.length
+                        count: books.length,
+                        searchBy
                     },
                     variant: 'success'
                 });
@@ -545,7 +680,11 @@
                     : 'There was an issue fetching suggestions. Please try again.';
 
                 logActivity('Search request failed', {
-                    details: message,
+                    details: {
+                        error: message,
+                        query,
+                        searchBy
+                    },
                     variant: 'error'
                 });
                 setFeedback(message, 'error');
@@ -554,7 +693,7 @@
             }
         }
 
-        async function reportResponseError(response, query) {
+        async function reportResponseError(response, query, searchBy) {
             let message = 'There was an issue fetching suggestions. Please try again.';
 
             try {
@@ -572,7 +711,8 @@
                     status: response.status,
                     statusText: response.statusText,
                     message,
-                    query
+                    query,
+                    searchBy
                 },
                 variant: 'error'
             });

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace BookWise.Web.Models;
@@ -24,6 +25,9 @@ public class Book
     [MaxLength(100)]
     public string? Category { get; set; }
 
+    [MaxLength(500)]
+    public string? Quote { get; set; }
+
     [MaxLength(20)]
     public string? ISBN { get; set; }
 
@@ -37,4 +41,6 @@ public class Book
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset? UpdatedAt { get; set; }
+
+    public ICollection<BookRemark> Remarks { get; set; } = new List<BookRemark>();
 }

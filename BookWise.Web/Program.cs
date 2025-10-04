@@ -1,8 +1,10 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using BookWise.Web.Data;
@@ -63,6 +65,8 @@ using (var scope = app.Services.CreateScope())
                 Author = "James Clear",
                 Description = "An easy & proven way to build good habits and break bad ones.",
                 Category = "Self-Improvement",
+                Quote = "Habits are the compound interest of self-improvement.",
+                ISBN = "9780735211292",
                 Rating = 4.8m
             },
             new Book
@@ -71,6 +75,8 @@ using (var scope = app.Services.CreateScope())
                 Author = "Andy Weir",
                 Description = "A lone astronaut must save the earth from disaster in this epic tale.",
                 Category = "Science Fiction",
+                Quote = "Humanity can solve anything when we act together.",
+                ISBN = "9780593135204",
                 Rating = 4.6m
             },
             new Book
@@ -79,6 +85,8 @@ using (var scope = app.Services.CreateScope())
                 Author = "Robert C. Martin",
                 Description = "A handbook of agile software craftsmanship.",
                 Category = "Software",
+                Quote = "Clean code always looks like it was written by someone who cares.",
+                ISBN = "9780132350884",
                 Rating = 4.7m
             }
         });
@@ -178,14 +186,17 @@ books.MapPost("", async (CreateBookRequest request, BookWiseContext db, ILogger<
     var operationId = Guid.NewGuid();
     var timer = Stopwatch.StartNew();
     logger.LogInformation(
-        "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', rating={Rating}, favorite={Favorite}",
+        "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', rating={Rating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
         operationId,
         request.Title,
         request.Author,
         request.Status,
         request.Category,
+        request.Isbn ?? "N/A",
         request.Rating,
-        request.IsFavorite);
+        request.IsFavorite,
+        !string.IsNullOrWhiteSpace(request.Quote),
+        request.Remarks?.Length ?? 0);
 
     var validationResults = new List<ValidationResult>();
     if (!Validator.TryValidateObject(request, new ValidationContext(request), validationResults, true))
@@ -214,15 +225,17 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
     var operationId = Guid.NewGuid();
     var timer = Stopwatch.StartNew();
     logger.LogInformation(
-        "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', rating={Rating}, favorite={Favorite}",
+        "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', rating={Rating}, favorite={Favorite}, quoteProvided={HasQuote}",
         operationId,
         id,
         request.Title,
         request.Author,
         request.Status,
         request.Category,
+        request.Isbn ?? "N/A",
         request.Rating,
-        request.IsFavorite);
+        request.IsFavorite,
+        !string.IsNullOrWhiteSpace(request.Quote));
 
     var validationResults = new List<ValidationResult>();
     if (!Validator.TryValidateObject(request, new ValidationContext(request), validationResults, true))
@@ -287,7 +300,12 @@ app.MapPost("/api/book-search", async Task<IResult> (
 {
     var operationId = Guid.NewGuid();
     var searchTimer = Stopwatch.StartNew();
-    logger.LogInformation("[{OperationId}] Douban search request for query '{Query}'", operationId, request.Query);
+    var scope = request.GetScope();
+    logger.LogInformation(
+        "[{OperationId}] Douban search request for query '{Query}' with scope {Scope}",
+        operationId,
+        request.Query,
+        scope);
 
     if (string.IsNullOrWhiteSpace(request.Query))
     {
@@ -298,7 +316,13 @@ app.MapPost("/api/book-search", async Task<IResult> (
     try
     {
         var doubanClient = httpClientFactory.CreateClient("DoubanBooks");
-        var books = await DoubanBookSearch.SearchAsync(request.Query, doubanClient, logger, operationId, cancellationToken);
+        var books = await DoubanBookSearch.SearchAsync(
+            request.Query,
+            scope,
+            doubanClient,
+            logger,
+            operationId,
+            cancellationToken);
 
         logger.LogInformation("[{OperationId}] Douban search returned {Count} results in {Elapsed} ms",
             operationId,
@@ -346,34 +370,156 @@ record CreateBookRequest(
     [property: Required, MaxLength(200)] string Title,
     [property: Required, MaxLength(200)] string Author,
     [property: MaxLength(2000)] string? Description,
+    [property: MaxLength(500)] string? Quote,
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
+    [property: MaxLength(20)] string? Isbn,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
-    [property: Range(0, 5)] decimal? Rating
-)
+    [property: Range(0, 5)] decimal? Rating,
+    CreateBookRemark[]? Remarks = null
+) : IValidatableObject
 {
-    public Book ToEntity() => new()
+    public Book ToEntity()
     {
-        Title = Title.Trim(),
-        Author = Author.Trim(),
-        Description = Description?.Trim(),
-        CoverImageUrl = CoverImageUrl?.Trim(),
-        Category = Category?.Trim(),
-        Status = NormalizeStatus(Status),
-        IsFavorite = IsFavorite,
-        Rating = Rating
-    };
+        var entity = new Book
+        {
+            Title = Title.Trim(),
+            Author = Author.Trim(),
+            Description = Description?.Trim(),
+            Quote = Quote?.Trim(),
+            CoverImageUrl = CoverImageUrl?.Trim(),
+            Category = Category?.Trim(),
+            ISBN = NormalizeIsbn(Isbn),
+            Status = NormalizeStatus(Status),
+            IsFavorite = IsFavorite,
+            Rating = Rating,
+            Remarks = BuildRemarks()
+        };
+
+        return entity;
+    }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Remarks is null)
+        {
+            yield break;
+        }
+
+        for (var index = 0; index < Remarks.Length; index++)
+        {
+            var remark = Remarks[index];
+            if (remark is null)
+            {
+                continue;
+            }
+
+            var validationResults = new List<ValidationResult>();
+            var remarkContext = new ValidationContext(remark)
+            {
+                MemberName = $"Remarks[{index}]"
+            };
+
+            if (Validator.TryValidateObject(remark, remarkContext, validationResults, validateAllProperties: true))
+            {
+                continue;
+            }
+
+            foreach (var result in validationResults)
+            {
+                var memberNames = result.MemberNames?.Select(member => $"Remarks[{index}].{member}")
+                    ?? new[] { $"Remarks[{index}]" };
+                yield return new ValidationResult(result.ErrorMessage, memberNames);
+            }
+        }
+    }
 
     private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();
+
+    public static string? NormalizeIsbn(string? isbn)
+    {
+        if (string.IsNullOrWhiteSpace(isbn))
+        {
+            return null;
+        }
+
+        var builder = new StringBuilder(isbn.Length);
+        foreach (var ch in isbn)
+        {
+            if (char.IsDigit(ch) || ch is 'x' or 'X')
+            {
+                builder.Append(char.ToUpperInvariant(ch));
+            }
+        }
+
+        if (builder.Length == 0)
+        {
+            return null;
+        }
+
+        return builder.ToString();
+    }
+
+    private List<BookRemark> BuildRemarks()
+    {
+        if (Remarks is null || Remarks.Length == 0)
+        {
+            return new List<BookRemark>();
+        }
+
+        var list = new List<BookRemark>(Remarks.Length);
+        foreach (var remark in Remarks)
+        {
+            if (remark is null)
+            {
+                continue;
+            }
+
+            var entity = remark.ToEntity();
+            if (entity is null)
+            {
+                continue;
+            }
+
+            list.Add(entity);
+        }
+
+        return list;
+    }
+}
+
+record CreateBookRemark(
+    [property: MaxLength(200)] string? Title,
+    [property: Required, MaxLength(4000)] string Content
+)
+{
+    public BookRemark? ToEntity()
+    {
+        var trimmedContent = Content?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedContent))
+        {
+            return null;
+        }
+
+        return new BookRemark
+        {
+            Title = string.IsNullOrWhiteSpace(Title) ? null : Title.Trim(),
+            Content = trimmedContent,
+            Type = BookRemarkType.Mine,
+            AddedOn = DateTimeOffset.UtcNow
+        };
+    }
 }
 
 record UpdateBookRequest(
     [property: Required, MaxLength(200)] string Title,
     [property: Required, MaxLength(200)] string Author,
     [property: MaxLength(2000)] string? Description,
+    [property: MaxLength(500)] string? Quote,
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
+    [property: MaxLength(20)] string? Isbn,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
     [property: Range(0, 5)] decimal? Rating
@@ -384,24 +530,44 @@ record UpdateBookRequest(
         book.Title = Title.Trim();
         book.Author = Author.Trim();
         book.Description = Description?.Trim();
+        book.Quote = Quote?.Trim();
         book.CoverImageUrl = CoverImageUrl?.Trim();
         book.Category = Category?.Trim();
+        book.ISBN = NormalizeIsbn(Isbn);
         book.Status = NormalizeStatus(Status);
         book.IsFavorite = IsFavorite;
         book.Rating = Rating;
     }
 
     private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();
+
+    private static string? NormalizeIsbn(string? isbn) => CreateBookRequest.NormalizeIsbn(isbn);
 }
 
-record BookSearchRequest(string Query);
+record BookSearchRequest(string Query, string? SearchBy = "title")
+{
+    public BookSearchScope GetScope() =>
+        string.Equals(SearchBy, "author", StringComparison.OrdinalIgnoreCase)
+            ? BookSearchScope.Author
+            : BookSearchScope.Title;
+}
 
 record BookSearchResponse(BookSuggestion[] Books);
+
+enum BookSearchScope
+{
+    Title,
+    Author
+}
 
 record BookSuggestion(
     string Title,
     string Author,
     string? Description,
+    string? Quote,
+    string? Category,
+    string? Isbn,
+    decimal? Rating,
     string? Published,
     string? Language,
     string? CoverImageUrl
@@ -422,27 +588,45 @@ static class DoubanBookSearch
 
     public static async Task<BookSuggestion[]> SearchAsync(
         string query,
+        BookSearchScope scope,
         HttpClient client,
         ILogger logger,
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        var suggestions = await FetchSuggestionsAsync(query, client, logger, operationId, cancellationToken);
-        if (suggestions.Count == 0)
+        var suggestionCandidates = await FetchSuggestionsAsync(
+            query,
+            scope,
+            client,
+            logger,
+            operationId,
+            cancellationToken);
+
+        if (suggestionCandidates.Count == 0)
         {
             return Array.Empty<BookSuggestion>();
         }
 
-        var results = new List<BookSuggestion>(suggestions.Count);
+        var results = new List<BookSuggestion>(suggestionCandidates.Count);
 
-        foreach (var suggestion in suggestions)
+        foreach (var suggestion in suggestionCandidates)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var book = await FetchBookDetailsAsync(suggestion, client, logger, operationId, cancellationToken);
             if (book is { } detail)
             {
+                if (scope == BookSearchScope.Author && !AuthorMatchesQuery(detail.Author, query))
+                {
+                    continue;
+                }
+
                 results.Add(detail);
+
+                if (results.Count >= MaxResults)
+                {
+                    break;
+                }
             }
         }
 
@@ -451,71 +635,91 @@ static class DoubanBookSearch
 
     private static async Task<List<DoubanSuggestion>> FetchSuggestionsAsync(
         string query,
+        BookSearchScope scope,
         HttpClient client,
         ILogger logger,
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        var encodedQuery = Uri.EscapeDataString(query); // Douban expects UTF-8 query
-        var requestUri = $"j/subject_suggest?q={encodedQuery}";
+        var suggestionLimit = scope == BookSearchScope.Author ? 15 : MaxResults;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var results = new List<DoubanSuggestion>(suggestionLimit);
+        var queries = scope == BookSearchScope.Author
+            ? BuildAuthorQueryVariants(query)
+            : BuildTitleQueryVariants(query);
 
-        using var response = await client.GetAsync(requestUri, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        foreach (var candidate in queries)
         {
-            logger.LogWarning("[{OperationId}] Douban suggestion request failed with status {StatusCode}", operationId, (int)response.StatusCode);
-            return new List<DoubanSuggestion>(); // no suggestions available
-        }
+            cancellationToken.ThrowIfCancellationRequested();
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var encodedQuery = Uri.EscapeDataString(candidate);
+            var requestUri = $"j/subject_suggest?q={encodedQuery}";
 
-        if (document.RootElement.ValueKind != JsonValueKind.Array)
-        {
-            logger.LogWarning("[{OperationId}] Douban suggestion response was not an array", operationId);
-            return new List<DoubanSuggestion>();
-        }
-
-        var suggestions = new List<DoubanSuggestion>(MaxResults);
-
-        foreach (var element in document.RootElement.EnumerateArray())
-        {
-            if (!element.TryGetProperty("url", out var urlElement) || urlElement.ValueKind != JsonValueKind.String)
+            using var response = await client.GetAsync(requestUri, cancellationToken);
+            if (!response.IsSuccessStatusCode)
             {
+                logger.LogWarning(
+                    "[{OperationId}] Douban suggestion request failed with status {StatusCode} for query '{Candidate}'",
+                    operationId,
+                    (int)response.StatusCode,
+                    candidate);
                 continue;
             }
 
-            var urlText = urlElement.GetString();
-            if (string.IsNullOrWhiteSpace(urlText))
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
             {
+                logger.LogWarning("[{OperationId}] Douban suggestion response was not an array", operationId);
                 continue;
             }
 
-            if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url))
+            foreach (var element in document.RootElement.EnumerateArray())
             {
-                continue;
-            }
+                if (!element.TryGetProperty("url", out var urlElement) || urlElement.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
 
-            var title = element.TryGetProperty("title", out var titleElement) && titleElement.ValueKind == JsonValueKind.String
-                ? titleElement.GetString() ?? string.Empty
-                : string.Empty;
+                var urlText = urlElement.GetString();
+                if (string.IsNullOrWhiteSpace(urlText))
+                {
+                    continue;
+                }
 
-            var author = element.TryGetProperty("author_name", out var authorElement) && authorElement.ValueKind == JsonValueKind.String
-                ? authorElement.GetString()
-                : null;
+                if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url))
+                {
+                    continue;
+                }
 
-            var year = element.TryGetProperty("year", out var yearElement) && yearElement.ValueKind == JsonValueKind.String
-                ? yearElement.GetString()
-                : null;
+                if (!seen.Add(url.AbsoluteUri))
+                {
+                    continue;
+                }
 
-            suggestions.Add(new DoubanSuggestion(title, author, year, url));
+                var title = element.TryGetProperty("title", out var titleElement) && titleElement.ValueKind == JsonValueKind.String
+                    ? titleElement.GetString() ?? string.Empty
+                    : string.Empty;
 
-            if (suggestions.Count >= MaxResults)
-            {
-                break;
+                var author = element.TryGetProperty("author_name", out var authorElement) && authorElement.ValueKind == JsonValueKind.String
+                    ? authorElement.GetString()
+                    : null;
+
+                var year = element.TryGetProperty("year", out var yearElement) && yearElement.ValueKind == JsonValueKind.String
+                    ? yearElement.GetString()
+                    : null;
+
+                results.Add(new DoubanSuggestion(title, author, year, url));
+
+                if (results.Count >= suggestionLimit)
+                {
+                    return results;
+                }
             }
         }
 
-        return suggestions;
+        return results;
     }
 
     private static async Task<BookSuggestion?> FetchBookDetailsAsync(
@@ -625,6 +829,125 @@ static class DoubanBookSearch
             string.IsNullOrWhiteSpace(published) ? null : HtmlEntity.DeEntitize(published),
             string.IsNullOrWhiteSpace(language) ? null : HtmlEntity.DeEntitize(language),
             string.IsNullOrWhiteSpace(cover) ? null : NormalizeCoverUrl(cover));
+    }
+
+    private static IEnumerable<string> BuildTitleQueryVariants(string query)
+    {
+        var trimmed = (query ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            yield break;
+        }
+
+        yield return trimmed;
+    }
+
+    private static IEnumerable<string> BuildAuthorQueryVariants(string query)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var trimmed = (query ?? string.Empty).Trim();
+
+        if (!string.IsNullOrEmpty(trimmed) && seen.Add(trimmed))
+        {
+            yield return trimmed;
+        }
+
+        var tokens = ExtractSearchTokens(trimmed);
+        if (tokens.Length > 1)
+        {
+            var joined = string.Join(' ', tokens);
+            if (!string.IsNullOrEmpty(joined) && seen.Add(joined))
+            {
+                yield return joined;
+            }
+        }
+
+        foreach (var token in tokens.OrderByDescending(token => token.Length))
+        {
+            if (seen.Add(token))
+            {
+                yield return token;
+            }
+        }
+    }
+
+    private static string[] ExtractSearchTokens(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return Array.Empty<string>();
+        }
+
+        var separators = new[] { ' ', ',', '.', ';', ':', '-', '_', '/', '\\', '\'', '"', '|', '\u00B7', '\u2013', '\u2014' };
+        return value
+            .Split(separators, StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => new string(part.Where(char.IsLetterOrDigit).ToArray()))
+            .Where(token => token.Length >= 2)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool AuthorMatchesQuery(string? author, string query)
+    {
+        if (string.IsNullOrWhiteSpace(author))
+        {
+            return false;
+        }
+
+        var normalizedAuthor = NormalizeForMatch(author);
+        if (string.IsNullOrEmpty(normalizedAuthor))
+        {
+            return false;
+        }
+
+        var normalizedQuery = NormalizeForMatch(query);
+        if (!string.IsNullOrEmpty(normalizedQuery) &&
+            normalizedAuthor.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        foreach (var token in ExtractSearchTokens(query))
+        {
+            var normalizedToken = NormalizeForMatch(token);
+            if (!string.IsNullOrEmpty(normalizedToken) &&
+                normalizedAuthor.Contains(normalizedToken, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string NormalizeForMatch(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length);
+        var previousIsSeparator = false;
+
+        foreach (var ch in value)
+        {
+            if (char.IsLetterOrDigit(ch))
+            {
+                builder.Append(char.ToLowerInvariant(ch));
+                previousIsSeparator = false;
+            }
+            else
+            {
+                if (!previousIsSeparator && builder.Length > 0)
+                {
+                    builder.Append(' ');
+                    previousIsSeparator = true;
+                }
+            }
+        }
+
+        return builder.ToString().Trim();
     }
 
     private static string? GetMetaContent(HtmlDocument document, string property)
