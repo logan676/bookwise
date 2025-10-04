@@ -586,11 +586,19 @@
                     return;
                 }
 
-                const created = await response.json();
+                // Book creation successful - don't parse full JSON to avoid circular reference issues
+                let bookId = null;
+                try {
+                    const created = await response.json();
+                    bookId = created?.id;
+                } catch (jsonError) {
+                    // JSON parsing failed but creation was successful (status 201)
+                    console.warn('Could not parse response JSON but book creation was successful:', jsonError);
+                }
 
                 logActivity('Book saved to library', {
                     details: {
-                        id: created?.id,
+                        id: bookId,
                         status: payload.status
                     },
                     variant: 'success'

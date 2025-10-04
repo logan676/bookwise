@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using BookWise.Web.Models;
@@ -63,41 +64,78 @@ namespace BookWise.Web.Pages
         {
             var timer = Stopwatch.StartNew();
             _logger.LogInformation("[AddBook] POST request to create '{Title}' by {Author} with status '{Status}'", Title, Author, Status);
+            
             if (!ModelState.IsValid)
             {
                 _logger.LogWarning("[AddBook] Model state invalid with {ErrorCount} errors", ModelState.ErrorCount);
+                foreach (var error in ModelState)
+                {
+                    _logger.LogWarning("[AddBook] Model error for {Key}: {Errors}", error.Key, string.Join("; ", error.Value.Errors.Select(e => e.ErrorMessage)));
+                }
                 return Page();
             }
 
-            var cancellationToken = HttpContext.RequestAborted;
+            try
+            {
+                var cancellationToken = HttpContext.RequestAborted;
 
-            var request = new CreateBookRequest(
-                Title,
-                Author,
-                AuthorAvatarUrl,
-                Description,
-                Quote,
-                CoverImageUrl,
-                Category,
-                ISBN,
-                DoubanSubjectId: null, // Not supported in this form
-                Status,
-                IsFavorite,
-                PersonalRating,
-                PublicRating,
-                Remarks: null);
+                var request = new CreateBookRequest(
+                    Title,
+                    Author,
+                    AuthorAvatarUrl,
+                    Description,
+                    Quote,
+                    CoverImageUrl,
+                    Category,
+                    ISBN,
+                    DoubanSubjectId: null, // Not supported in this form
+                    Status,
+                    IsFavorite,
+                    PersonalRating,
+                    PublicRating,
+                    Remarks: null);
 
-            var normalized = request.WithNormalizedData();
-            var authorEntity = await AuthorResolver.GetOrCreateAsync(_context, normalized.Author, normalized.AuthorAvatarUrl, cancellationToken);
-            var book = normalized.ToEntity(authorEntity);
-            CreateBookRequest.SyncQuoteSnapshot(book);
+                _logger.LogDebug("[AddBook] Validating request...");
+                var validationResults = new List<ValidationResult>();
+                var validationContext = new ValidationContext(request);
+                if (!Validator.TryValidateObject(request, validationContext, validationResults, validateAllProperties: true))
+                {
+                    _logger.LogWarning("[AddBook] Request validation failed: {Errors}", string.Join("; ", validationResults.Select(r => r.ErrorMessage)));
+                    foreach (var validationResult in validationResults)
+                    {
+                        ModelState.AddModelError(string.Join(",", validationResult.MemberNames), validationResult.ErrorMessage ?? "Validation error");
+                    }
+                    return Page();
+                }
 
-            _context.Books.Add(book);
-            await _context.SaveChangesAsync(cancellationToken);
+                _logger.LogDebug("[AddBook] Normalizing request data...");
+                var normalized = request.WithNormalizedData();
+                
+                _logger.LogDebug("[AddBook] Creating or finding author...");
+                var authorEntity = await AuthorResolver.GetOrCreateAsync(_context, normalized.Author, normalized.AuthorAvatarUrl, cancellationToken);
+                
+                _logger.LogDebug("[AddBook] Converting to entity...");
+                var book = normalized.ToEntity(authorEntity);
+                CreateBookRequest.SyncQuoteSnapshot(book);
 
-            timer.Stop();
-            _logger.LogInformation("[AddBook] Book created with id {Id} in {Elapsed} ms", book.Id, timer.ElapsedMilliseconds);
-            return RedirectToPage("./Index");
+                _logger.LogDebug("[AddBook] Adding book to context...");
+                _context.Books.Add(book);
+                
+                _logger.LogDebug("[AddBook] Saving changes...");
+                await _context.SaveChangesAsync(cancellationToken);
+
+                timer.Stop();
+                _logger.LogInformation("[AddBook] Book created with id {Id} in {Elapsed} ms", book.Id, timer.ElapsedMilliseconds);
+                return RedirectToPage("./Index");
+            }
+            catch (Exception ex)
+            {
+                timer.Stop();
+                _logger.LogError(ex, "[AddBook] Failed to create book '{Title}' by {Author} after {Elapsed} ms", Title, Author, timer.ElapsedMilliseconds);
+                
+                ModelState.AddModelError(string.Empty, "We could not add this book right now. Please try again.");
+                return Page();
+            }
         }
     }
 }

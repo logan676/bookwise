@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Test Add Book UI</title>
+  </head>
+  <body>
+    <h1>Test Add Book UI</h1>
+    <button id="testButton">Test Add Book</button>
+    <div id="result"></div>
+
+    <script>
+      document
+        .getElementById("testButton")
+        .addEventListener("click", async () => {
+          const resultDiv = document.getElementById("result");
+          resultDiv.innerHTML = "Testing...";
+
+          try {
+            const payload = {
+              title: "UI Test Book From Browser",
+              author: "UI Test Author From Browser",
+              status: "plan-to-read",
+              isFavorite: false,
+            };
+
+            console.log("Sending payload:", payload);
+
+            const response = await fetch("/api/books", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(payload),
+            });
+
+            console.log("Response status:", response.status);
+            console.log("Response ok:", response.ok);
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              resultDiv.innerHTML = `Error: ${response.status} - ${errorText}`;
+              return;
+            }
+
+            // Test our fix: try to parse JSON with error handling
+            let bookId = null;
+            try {
+              const created = await response.json();
+              bookId = created?.id;
+              console.log("Successfully parsed JSON, book ID:", bookId);
+              resultDiv.innerHTML = `Success! Book created with ID: ${bookId}`;
+            } catch (jsonError) {
+              console.warn(
+                "JSON parsing failed but creation was successful:",
+                jsonError
+              );
+              resultDiv.innerHTML = `Success! Book created but couldn't parse response JSON. Error: ${jsonError.message}`;
+            }
+
+            // Simulate what the real UI does
+            setTimeout(() => {
+              console.log("Would redirect to /");
+              resultDiv.innerHTML += "<br>Would redirect to home page now.";
+            }, 1000);
+          } catch (error) {
+            console.error("Request failed:", error);
+            resultDiv.innerHTML = `Error: ${error.message}`;
+          }
+        });
+    </script>
+  </body>
+</html>
