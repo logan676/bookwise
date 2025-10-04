@@ -17,12 +17,8 @@
                        id="book-search" 
                        placeholder="Search for a book by title or author..." 
                        class="search-input" 
-                       autocomplete="off" />
-                <label class="sr-only" for="search-mode">Search scope</label>
-                <select id="search-mode" class="search-mode-select">
-                    <option value="title" selected>Title</option>
-                    <option value="author">Author</option>
-                </select>
+                       autocomplete="off" 
+                       aria-label="Search for a book" />
                 <button type="button" class="search-submit" id="execute-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"/>
@@ -99,7 +95,7 @@
         </header>
         <div class="status-modal-options" id="reading-status-options"></div>
         <div class="status-modal-form-group">
-            <label for="book-rating" class="status-modal-label">Rating (optional)</label>
+            <label for="book-rating" class="status-modal-label">My rating (optional)</label>
             <input type="number"
                    id="book-rating"
                    class="status-modal-input"
@@ -109,7 +105,7 @@
                    step="0.5"
                    inputmode="decimal"
                    placeholder="e.g. 4.5" />
-            <p class="status-modal-helper">Use a value between 0 and 5 to capture your first impression.</p>
+            <p class="status-modal-helper">Capture your personal score between 0 and 5.</p>
         </div>
         <div class="status-modal-form-group">
             <label for="remark-content" class="status-modal-label">Personal remark (optional)</label>
@@ -141,7 +137,6 @@
         // Search functionality
         const searchInput = document.getElementById('book-search');
         const searchButton = document.getElementById('execute-search');
-        const searchModeSelect = document.getElementById('search-mode');
         const emptyState = document.getElementById('empty-state');
         const searchResults = document.getElementById('search-results');
         const resultsList = document.getElementById('results-list');
@@ -179,6 +174,15 @@
                 helper: 'Log it as completed and celebrate the win.'
             }
         ];
+
+        const normalizeRatingValue = (value) => {
+            if (typeof value !== 'number' || !Number.isFinite(value)) {
+                return null;
+            }
+
+            const clamped = Math.min(5, Math.max(0, value));
+            return Math.round(clamped * 10) / 10;
+        };
 
         let selectedBook = null;
         let selectedStatus = readingStatusOptions[0]?.value ?? 'plan-to-read';
@@ -220,14 +224,6 @@
         });
 
         searchButton.addEventListener('click', handleSearch);
-
-        searchModeSelect?.addEventListener('change', () => {
-            const mode = resolveSearchMode();
-            logActivity('Search mode updated', {
-                details: { searchBy: mode },
-                variant: 'info'
-            });
-        });
 
         clearLogButton?.addEventListener('click', resetActivityLog);
 
@@ -335,7 +331,7 @@
                 category = '',
                 quote = '',
                 isbn = '',
-                rating = ''
+                publicRating = ''
             } = button.dataset;
 
             const toNullable = (value) => {
@@ -343,7 +339,7 @@
                 return trimmed.length > 0 ? trimmed : null;
             };
 
-            const parsedRating = Number.parseFloat(rating);
+            const parsedPublicRating = Number.parseFloat(publicRating);
 
             return {
                 title: title.trim(),
@@ -353,7 +349,7 @@
                 category: toNullable(category),
                 quote: toNullable(quote),
                 isbn: toNullable(isbn),
-                rating: Number.isFinite(parsedRating) ? parsedRating : null
+                publicRating: Number.isFinite(parsedPublicRating) ? parsedPublicRating : null
             };
         }
 
@@ -542,21 +538,8 @@
             const title = sanitizeOptionalText(book.title, 200) ?? '';
             const author = sanitizeOptionalText(book.author, 200) ?? '';
 
-            const resolvedRating = (() => {
-                if (typeof extras.rating === 'number' && Number.isFinite(extras.rating)) {
-                    return extras.rating;
-                }
-
-                if (typeof book.rating === 'number' && Number.isFinite(book.rating)) {
-                    return book.rating;
-                }
-
-                return null;
-            })();
-
-            const normalizedRating = resolvedRating !== null
-                ? Math.min(5, Math.max(0, Math.round(resolvedRating * 10) / 10))
-                : null;
+            const personalRating = normalizeRatingValue(extras.rating);
+            const publicRating = normalizeRatingValue(book.publicRating);
 
             const payload = {
                 title,
@@ -568,7 +551,8 @@
                 isbn: sanitizeOptionalText(book.isbn, 20),
                 status: normalizedStatus,
                 isFavorite: false,
-                rating: normalizedRating
+                personalRating,
+                publicRating
             };
 
             if (extras.remark) {
@@ -576,10 +560,6 @@
             }
 
             return payload;
-        }
-
-        function resolveSearchMode() {
-            return searchModeSelect?.value === 'author' ? 'author' : 'title';
         }
 
         function tryParseRating() {
@@ -644,25 +624,22 @@
                 return;
             }
 
-            const searchBy = resolveSearchMode();
-            const isAuthorSearch = searchBy === 'author';
-
             searchButton.disabled = true;
             emptyState.style.display = 'none';
             searchResults.style.display = 'block';
             resultsList.innerHTML = '';
-            setFeedback(isAuthorSearch ? 'Searching for authors...' : 'Searching for books...');
+            setFeedback('Searching for matches...');
 
             try {
                 logActivity('Search submitted', {
-                    details: { query, searchBy },
+                    details: { query },
                     variant: 'info'
                 });
                 logActivity('Dispatching request', {
                     details: {
                         method: 'POST',
                         url: '/api/book-search',
-                        payload: { query, searchBy }
+                        payload: { query }
                     },
                     variant: 'info'
                 });
@@ -672,11 +649,11 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ query, searchBy })
+                    body: JSON.stringify({ query })
                 });
 
                 if (!response.ok) {
-                    await reportResponseError(response, query, searchBy);
+                    await reportResponseError(response, query);
                     return;
                 }
 
@@ -688,7 +665,6 @@
                         status: response.status,
                         statusText: response.statusText,
                         totalBooks: books.length,
-                        searchBy,
                         sample: books.slice(0, 3).map((book) => ({
                             title: book.title,
                             author: book.author,
@@ -700,7 +676,7 @@
 
                 if (books.length === 0) {
                     logActivity('No matching books found', {
-                        details: { query, searchBy },
+                        details: { query },
                         variant: 'warning'
                     });
                     setFeedback('No matching books found. Try another title or author name.', 'error');
@@ -710,8 +686,7 @@
                 setFeedback(`Showing ${books.length} suggestion${books.length === 1 ? '' : 's'}.`, 'success');
                 logActivity('Suggestions ready', {
                     details: {
-                        count: books.length,
-                        searchBy
+                        count: books.length
                     },
                     variant: 'success'
                 });
@@ -724,8 +699,7 @@
                 logActivity('Search request failed', {
                     details: {
                         error: message,
-                        query,
-                        searchBy
+                        query
                     },
                     variant: 'error'
                 });
@@ -735,7 +709,7 @@
             }
         }
 
-        async function reportResponseError(response, query, searchBy) {
+        async function reportResponseError(response, query) {
             let message = 'There was an issue fetching suggestions. Please try again.';
 
             try {
@@ -753,8 +727,7 @@
                     status: response.status,
                     statusText: response.statusText,
                     message,
-                    query,
-                    searchBy
+                    query
                 },
                 variant: 'error'
             });
@@ -786,8 +759,12 @@
                     metaParts.push(`Language: ${escapeHtml(safeLanguage)}`);
                 }
 
-                if (typeof book.rating === 'number' && Number.isFinite(book.rating)) {
-                    metaParts.push(`Rating: ${escapeHtml(book.rating.toFixed(1))}/5`);
+                const communityRating = typeof book.rating === 'number' && Number.isFinite(book.rating)
+                    ? book.rating
+                    : null;
+
+                if (communityRating !== null) {
+                    metaParts.push(`Community rating: ${escapeHtml(communityRating.toFixed(1))}/5`);
                 }
 
                 if (safeCategory) {
@@ -818,8 +795,8 @@
                 const categoryData = escapeAttribute(safeCategory ?? '');
                 const quoteData = escapeAttribute(safeQuote ?? '');
                 const isbnData = escapeAttribute(safeIsbn ?? '');
-                const ratingData = (typeof book.rating === 'number' && Number.isFinite(book.rating))
-                    ? escapeAttribute(book.rating.toFixed(1))
+                const ratingData = communityRating !== null
+                    ? escapeAttribute(communityRating.toFixed(1))
                     : '';
 
                 return `
@@ -842,7 +819,7 @@
                             data-category="${categoryData}"
                             data-quote="${quoteData}"
                             data-isbn="${isbnData}"
-                            data-rating="${ratingData}">
+                            data-public-rating="${ratingData}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>

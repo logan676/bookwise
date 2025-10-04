@@ -44,40 +44,41 @@ namespace BookWise.Web.Pages
 
         private async Task<IReadOnlyList<AuthorProfile>> LoadAuthorsAsync(CancellationToken cancellationToken)
         {
-            var books = await _context.Books
+            var authors = await _context.Authors
                 .AsNoTracking()
-                .OrderBy(book => book.Author)
-                .ThenBy(book => book.Title)
+                .Include(author => author.Books)
+                .OrderBy(author => author.Name)
                 .ToListAsync(cancellationToken);
 
-            if (books.Count == 0)
+            if (authors.Count == 0)
             {
                 return Array.Empty<AuthorProfile>();
             }
 
-            var authorProfiles = books
-                .GroupBy(book => book.Author)
-                .Select(group =>
+            var authorProfiles = authors
+                .Where(author => author.Books.Count > 0)
+                .Select(author =>
                 {
-                    var works = group.ToList();
+                    var works = author.Books
+                        .OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
                     var libraryWorks = works
                         .Where(book => IsLibraryStatus(book.Status))
-                        .OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
                         .Select(MapToAuthorWork)
                         .ToList();
 
                     var availableWorks = works
                         .Where(book => !IsLibraryStatus(book.Status))
-                        .OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
                         .Select(MapToAuthorWork)
                         .ToList();
 
                     return new AuthorProfile
                     {
-                        Slug = GenerateSlug(group.Key),
-                        Name = group.Key,
+                        Slug = GenerateSlug(author.Name),
+                        Name = author.Name,
                         Summary = BuildAuthorSummary(works),
-                        PhotoUrl = BuildAuthorAvatarUrl(group.Key),
+                        PhotoUrl = BuildAuthorAvatarUrl(author.Name),
                         WorkCount = works.Count,
                         Library = libraryWorks,
                         AvailableWorks = availableWorks

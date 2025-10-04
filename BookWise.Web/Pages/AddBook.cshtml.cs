@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using BookWise.Web.Models;
 using BookWise.Web.Data;
+using BookWise.Web.Services.Authors;
 
 namespace BookWise.Web.Pages
 {
@@ -39,7 +40,10 @@ namespace BookWise.Web.Pages
         public string? CoverImageUrl { get; set; }
 
         [BindProperty]
-        public decimal? Rating { get; set; }
+        public decimal? PersonalRating { get; set; }
+
+        [BindProperty]
+        public decimal? PublicRating { get; set; }
 
         [BindProperty]
         public string Status { get; set; } = "plan-to-read";
@@ -62,22 +66,28 @@ namespace BookWise.Web.Pages
                 return Page();
             }
 
-            var book = new Book
-            {
-                Title = Title,
-                Author = Author,
-                ISBN = ISBN,
-                Category = Category,
-                Quote = Quote,
-                Description = Description,
-                CoverImageUrl = CoverImageUrl,
-                Rating = Rating,
-                Status = Status,
-                IsFavorite = IsFavorite
-            };
+            var cancellationToken = HttpContext.RequestAborted;
+
+            var request = new CreateBookRequest(
+                Title,
+                Author,
+                Description,
+                Quote,
+                CoverImageUrl,
+                Category,
+                ISBN,
+                Status,
+                IsFavorite,
+                PersonalRating,
+                PublicRating,
+                Remarks: null);
+
+            var normalized = request.WithNormalizedData();
+            var authorEntity = await AuthorResolver.GetOrCreateAsync(_context, normalized.Author, cancellationToken);
+            var book = normalized.ToEntity(authorEntity);
 
             _context.Books.Add(book);
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(cancellationToken);
 
             timer.Stop();
             _logger.LogInformation("[AddBook] Book created with id {Id} in {Elapsed} ms", book.Id, timer.ElapsedMilliseconds);

@@ -3,6 +3,7 @@ using System;
 using BookWise.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BookWise.Web.Migrations
 {
     [DbContext(typeof(BookWiseContext))]
-    partial class BookWiseContextModelSnapshot : ModelSnapshot
+    [Migration("20251004090739_AddAuthors")]
+    partial class AddAuthors
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -160,45 +163,6 @@ namespace BookWise.Web.Migrations
                     b.ToTable("Books");
                 });
 
-            modelBuilder.Entity("BookWise.Web.Models.BookQuote", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTimeOffset>("AddedOn")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<string>("Author")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("BackgroundImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("BookId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Source")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BookId");
-
-                    b.ToTable("BookQuotes");
-                });
-
             modelBuilder.Entity("BookWise.Web.Models.BookRemark", b =>
                 {
                     b.Property<int>("Id")
@@ -243,17 +207,6 @@ namespace BookWise.Web.Migrations
                     b.Navigation("AuthorDetails");
                 });
 
-            modelBuilder.Entity("BookWise.Web.Models.BookQuote", b =>
-                {
-                    b.HasOne("BookWise.Web.Models.Book", "Book")
-                        .WithMany("Quotes")
-                        .HasForeignKey("BookId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Book");
-                });
-
             modelBuilder.Entity("BookWise.Web.Models.BookRemark", b =>
                 {
                     b.HasOne("BookWise.Web.Models.Book", "Book")
@@ -272,8 +225,6 @@ namespace BookWise.Web.Migrations
 
             modelBuilder.Entity("BookWise.Web.Models.Book", b =>
                 {
-                    b.Navigation("Quotes");
-
                     b.Navigation("Remarks");
                 });
 #pragma warning restore 612, 618

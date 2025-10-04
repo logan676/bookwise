@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 using BookWise.Web.Data;
 using BookWise.Web.Models;
 using BookWise.Web.Options;
+using BookWise.Web.Services.Authors;
 using BookWise.Web.Services.Recommendations;
 using HtmlAgilityPack;
 using Microsoft.AspNetCore.Http;
@@ -78,40 +79,73 @@ using (var scope = app.Services.CreateScope())
     {
         db.Books.AddRange(new[]
         {
-            new Book
-            {
-                Title = "Atomic Habits",
-                Author = "James Clear",
-                Description = "An easy & proven way to build good habits and break bad ones.",
-                Category = "Self-Improvement",
-                Quote = "Habits are the compound interest of self-improvement.",
-                ISBN = "9780735211292",
-                Rating = 4.8m
-            },
-            new Book
-            {
-                Title = "Project Hail Mary",
-                Author = "Andy Weir",
-                Description = "A lone astronaut must save the earth from disaster in this epic tale.",
-                Category = "Science Fiction",
-                Quote = "Humanity can solve anything when we act together.",
-                ISBN = "9780593135204",
-                Rating = 4.6m
-            },
-            new Book
-            {
-                Title = "Clean Code",
-                Author = "Robert C. Martin",
-                Description = "A handbook of agile software craftsmanship.",
-                Category = "Software",
-                Quote = "Clean code always looks like it was written by someone who cares.",
-                ISBN = "9780132350884",
-                Rating = 4.7m
-            }
+            CreateSeedBook(
+                title: "Atomic Habits",
+                authorName: "James Clear",
+                description: "An easy & proven way to build good habits and break bad ones.",
+                category: "Self-Improvement",
+                quote: "Habits are the compound interest of self-improvement.",
+                isbn: "9780735211292",
+                publicRating: 4.8m),
+            CreateSeedBook(
+                title: "Project Hail Mary",
+                authorName: "Andy Weir",
+                description: "A lone astronaut must save the earth from disaster in this epic tale.",
+                category: "Science Fiction",
+                quote: "Humanity can solve anything when we act together.",
+                isbn: "9780593135204",
+                publicRating: 4.6m),
+            CreateSeedBook(
+                title: "Clean Code",
+                authorName: "Robert C. Martin",
+                description: "A handbook of agile software craftsmanship.",
+                category: "Software",
+                quote: "Clean code always looks like it was written by someone who cares.",
+                isbn: "9780132350884",
+                publicRating: 4.7m)
         });
 
         db.SaveChanges();
     }
+}
+
+static Book CreateSeedBook(
+    string title,
+    string authorName,
+    string description,
+    string category,
+    string quote,
+    string isbn,
+    decimal publicRating)
+{
+    var author = new Author
+    {
+        Name = authorName,
+        NormalizedName = AuthorResolver.BuildNormalizedKey(authorName)
+    };
+
+    var book = new Book
+    {
+        Title = title,
+        Author = author.Name,
+        AuthorDetails = author,
+        Category = category,
+        Description = description,
+        Quote = quote,
+        ISBN = isbn,
+        PublicRating = publicRating,
+        Quotes =
+        {
+            new BookQuote
+            {
+                Text = quote,
+                Author = author.Name,
+                Source = title
+            }
+        }
+    };
+
+    return book;
 }
 
 if (!app.Environment.IsDevelopment())
@@ -213,14 +247,15 @@ books.MapPost("", async (
     var normalizedRequest = request.WithNormalizedData();
 
     logger.LogInformation(
-        "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', rating={Rating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
+        "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
         operationId,
         normalizedRequest.Title,
         normalizedRequest.Author,
         normalizedRequest.Status,
         normalizedRequest.Category,
         normalizedRequest.Isbn ?? "N/A",
-        normalizedRequest.Rating,
+        normalizedRequest.PersonalRating,
+        normalizedRequest.PublicRating,
         normalizedRequest.IsFavorite,
         !string.IsNullOrWhiteSpace(normalizedRequest.Quote),
         normalizedRequest.Remarks?.Length ?? 0);
@@ -234,11 +269,12 @@ books.MapPost("", async (
             .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
     }
 
-    var entity = normalizedRequest.ToEntity();
+    var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, cancellationToken);
+    var entity = normalizedRequest.ToEntity(author);
     await db.Books.AddAsync(entity, cancellationToken);
     await db.SaveChangesAsync(cancellationToken);
 
-    await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { entity.Author }, cancellationToken);
+    await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { author.Name }, cancellationToken);
 
     timer.Stop();
     logger.LogInformation(
@@ -249,7 +285,7 @@ books.MapPost("", async (
     return Results.Created($"/api/books/{entity.Id}", entity);
 });
 
-books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseContext db, ILogger<Program> logger) =>
+books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseContext db, ILogger<Program> logger, CancellationToken cancellationToken) =>
 {
     var operationId = Guid.NewGuid();
     var timer = Stopwatch.StartNew();
@@ -257,7 +293,7 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
     var normalizedRequest = request.WithNormalizedData();
 
     logger.LogInformation(
-        "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', rating={Rating}, favorite={Favorite}, quoteProvided={HasQuote}",
+        "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}",
         operationId,
         id,
         normalizedRequest.Title,
@@ -265,7 +301,8 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
         normalizedRequest.Status,
         normalizedRequest.Category,
         normalizedRequest.Isbn ?? "N/A",
-        normalizedRequest.Rating,
+        normalizedRequest.PersonalRating,
+        normalizedRequest.PublicRating,
         normalizedRequest.IsFavorite,
         !string.IsNullOrWhiteSpace(normalizedRequest.Quote));
 
@@ -278,15 +315,20 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
             .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
     }
 
-    var book = await db.Books.FindAsync(id);
+    var book = await db.Books
+        .Include(b => b.Quotes)
+        .FirstOrDefaultAsync(b => b.Id == id, cancellationToken);
     if (book is null)
     {
         logger.LogWarning("[{OperationId}] Book {Id} not found for update", operationId, id);
         return Results.NotFound();
     }
 
-    normalizedRequest.Apply(book);
-    await db.SaveChangesAsync();
+    var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, cancellationToken);
+
+    normalizedRequest.Apply(book, author);
+    SyncQuoteSnapshot(book);
+    await db.SaveChangesAsync(cancellationToken);
 
     timer.Stop();
     logger.LogInformation(
@@ -297,6 +339,37 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
         book.Status,
         timer.ElapsedMilliseconds);
     return Results.Ok(book);
+    void SyncQuoteSnapshot(Book bookEntity)
+    {
+        var snapshot = CreateBookRequest.CreateQuoteSnapshot(
+            bookEntity.Quote,
+            bookEntity.Title,
+            bookEntity.Author,
+            bookEntity.CoverImageUrl);
+
+        var existing = bookEntity.Quotes.FirstOrDefault();
+
+        if (snapshot is null)
+        {
+            if (existing is not null)
+            {
+                bookEntity.Quotes.Remove(existing);
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            bookEntity.Quotes.Add(snapshot);
+            return;
+        }
+
+        existing.Text = snapshot.Text;
+        existing.Author = snapshot.Author;
+        existing.Source = snapshot.Source;
+        existing.BackgroundImageUrl = snapshot.BackgroundImageUrl;
+    }
 });
 
 books.MapDelete("/{id:int}", async (int id, BookWiseContext db, ILogger<Program> logger) =>
@@ -408,7 +481,8 @@ record CreateBookRequest(
     [property: MaxLength(20)] string? Isbn,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
-    [property: Range(0, 5)] decimal? Rating,
+    [property: Range(0, 5)] decimal? PersonalRating,
+    [property: Range(0, 5)] decimal? PublicRating,
     CreateBookRemark[]? Remarks = null
 ) : IValidatableObject
 {
@@ -426,26 +500,61 @@ record CreateBookRequest(
             Category = TrimToLength(Category, 100),
             Isbn = NormalizeIsbn(Isbn),
             Status = NormalizeStatus(Status),
+            PersonalRating = NormalizeRating(PersonalRating),
+            PublicRating = NormalizeRating(PublicRating),
             Remarks = normalizedRemarks
         };
     }
 
-    public Book ToEntity()
+    public Book ToEntity(Author author)
     {
-        return new Book
+        ArgumentNullException.ThrowIfNull(author);
+
+        var normalizedTitle = TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty;
+        var normalizedAuthor = TrimToLength(author.Name, 200, allowEmpty: true) ?? string.Empty;
+        author.Name = normalizedAuthor;
+        author.NormalizedName = AuthorResolver.BuildNormalizedKey(normalizedAuthor);
+
+        var normalizedDescription = TrimToLength(Description, 2000);
+        var normalizedQuote = TrimToLength(Quote, 500);
+        var normalizedCover = TrimToLength(CoverImageUrl, 500);
+        var normalizedCategory = TrimToLength(Category, 100);
+        var normalizedIsbn = NormalizeIsbn(Isbn);
+        var normalizedStatus = NormalizeStatus(Status);
+        var normalizedPersonalRating = NormalizeRating(PersonalRating);
+        var normalizedPublicRating = NormalizeRating(PublicRating);
+        var remarks = BuildRemarks();
+
+        var entity = new Book
         {
-            Title = TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty,
-            Author = TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty,
-            Description = TrimToLength(Description, 2000),
-            Quote = TrimToLength(Quote, 500),
-            CoverImageUrl = TrimToLength(CoverImageUrl, 500),
-            Category = TrimToLength(Category, 100),
-            ISBN = NormalizeIsbn(Isbn),
-            Status = NormalizeStatus(Status),
+            Title = normalizedTitle,
+            Author = normalizedAuthor,
+            AuthorId = author.Id,
+            AuthorDetails = author,
+            Description = normalizedDescription,
+            Quote = normalizedQuote,
+            CoverImageUrl = normalizedCover,
+            Category = normalizedCategory,
+            ISBN = normalizedIsbn,
+            Status = normalizedStatus,
             IsFavorite = IsFavorite,
-            Rating = Rating,
-            Remarks = BuildRemarks()
+            PersonalRating = normalizedPersonalRating,
+            PublicRating = normalizedPublicRating,
+            Remarks = remarks
         };
+
+        var quoteSnapshot = CreateQuoteSnapshot(
+            normalizedQuote,
+            normalizedTitle,
+            normalizedAuthor,
+            normalizedCover);
+
+        if (quoteSnapshot is not null)
+        {
+            entity.Quotes.Add(quoteSnapshot);
+        }
+
+        return entity;
     }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
@@ -490,6 +599,17 @@ record CreateBookRequest(
     }
 
     private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();
+
+    internal static decimal? NormalizeRating(decimal? rating)
+    {
+        if (rating is null)
+        {
+            return null;
+        }
+
+        var clamped = Math.Clamp(rating.Value, 0m, 5m);
+        return Math.Round(clamped, 1, MidpointRounding.AwayFromZero);
+    }
 
     internal static string? TrimToLength(string? value, int maxLength, bool allowEmpty = false)
     {
@@ -648,6 +768,27 @@ record CreateBookRequest(
         return normalized.Length == 0 ? null : normalized;
     }
 
+    internal static BookQuote? CreateQuoteSnapshot(string? quote, string title, string author, string? coverImageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(quote))
+        {
+            return null;
+        }
+
+        var resolvedAuthor = string.IsNullOrWhiteSpace(author) ? "Unknown" : author;
+        var resolvedSource = string.IsNullOrWhiteSpace(title) ? null : title;
+        var resolvedCover = string.IsNullOrWhiteSpace(coverImageUrl) ? null : coverImageUrl;
+
+        return new BookQuote
+        {
+            Text = quote,
+            Author = resolvedAuthor,
+            Source = resolvedSource,
+            BackgroundImageUrl = resolvedCover,
+            AddedOn = DateTimeOffset.UtcNow
+        };
+    }
+
     private List<BookRemark> BuildRemarks()
     {
         if (Remarks is null || Remarks.Length == 0)
@@ -721,7 +862,8 @@ record UpdateBookRequest(
     [property: MaxLength(20)] string? Isbn,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
-    [property: Range(0, 5)] decimal? Rating
+    [property: Range(0, 5)] decimal? PersonalRating,
+    [property: Range(0, 5)] decimal? PublicRating
 )
 {
     public UpdateBookRequest WithNormalizedData() => this with
@@ -733,13 +875,24 @@ record UpdateBookRequest(
         CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500),
         Category = CreateBookRequest.TrimToLength(Category, 100),
         Isbn = CreateBookRequest.NormalizeIsbn(Isbn),
-        Status = NormalizeStatus(Status)
+        Status = NormalizeStatus(Status),
+        PersonalRating = CreateBookRequest.NormalizeRating(PersonalRating),
+        PublicRating = CreateBookRequest.NormalizeRating(PublicRating)
     };
 
-    public void Apply(Book book)
+    public void Apply(Book book, Author author)
     {
+        ArgumentNullException.ThrowIfNull(book);
+        ArgumentNullException.ThrowIfNull(author);
+
+        var normalizedAuthor = CreateBookRequest.TrimToLength(author.Name, 200, allowEmpty: true) ?? string.Empty;
+        author.Name = normalizedAuthor;
+        author.NormalizedName = AuthorResolver.BuildNormalizedKey(normalizedAuthor);
+
         book.Title = CreateBookRequest.TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty;
-        book.Author = CreateBookRequest.TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty;
+        book.Author = normalizedAuthor;
+        book.AuthorId = author.Id;
+        book.AuthorDetails = author;
         book.Description = CreateBookRequest.TrimToLength(Description, 2000);
         book.Quote = CreateBookRequest.TrimToLength(Quote, 500);
         book.CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500);
@@ -747,7 +900,8 @@ record UpdateBookRequest(
         book.ISBN = CreateBookRequest.NormalizeIsbn(Isbn);
         book.Status = NormalizeStatus(Status);
         book.IsFavorite = IsFavorite;
-        book.Rating = Rating;
+        book.PersonalRating = CreateBookRequest.NormalizeRating(PersonalRating);
+        book.PublicRating = CreateBookRequest.NormalizeRating(PublicRating);
     }
 
     private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();

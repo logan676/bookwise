@@ -24,12 +24,11 @@ public sealed class AuthorRecommendationRefresher : IAuthorRecommendationRefresh
 
     public async Task RefreshAsync(AuthorRecommendationWorkItem workItem, CancellationToken cancellationToken)
     {
-        var libraryAuthors = await _dbContext.Books
+        var libraryAuthors = await _dbContext.Authors
             .AsNoTracking()
-            .Where(book => !string.IsNullOrWhiteSpace(book.Author))
-            .Select(book => book.Author.Trim())
-            .Distinct()
-            .OrderBy(author => author)
+            .Where(author => author.Books.Any())
+            .OrderBy(author => author.Name)
+            .Select(author => author.Name)
             .ToListAsync(cancellationToken);
 
         if (libraryAuthors.Count == 0)
@@ -124,8 +123,8 @@ public sealed class AuthorRecommendationRefresher : IAuthorRecommendationRefresh
 
             _dbContext.AuthorRecommendations.Add(new AuthorRecommendation
             {
-                FocusAuthor = Truncate(focus, 200),
-                RecommendedAuthor = Truncate(recommended, 200),
+                FocusAuthor = Truncate(focus, 200) ?? focus,
+                RecommendedAuthor = Truncate(recommended, 200) ?? recommended,
                 Rationale = Truncate(rationale, 1000),
                 ImageUrl = Truncate(imageUrl, 500),
                 ConfidenceScore = confidence,

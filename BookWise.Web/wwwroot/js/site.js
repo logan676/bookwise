@@ -284,10 +284,21 @@
 
       const rating = document.createElement("div");
       rating.className = "meta";
-      if (book.rating != null) {
-        rating.innerHTML = `${icons.star(true)}<span>${Number(
-          book.rating
-        ).toFixed(1)} / 5</span>`;
+      const personalRating = toNullableNumber(book.personalRating);
+      const communityRating = toNullableNumber(book.publicRating);
+      if (personalRating != null || communityRating != null) {
+        const parts = [];
+        if (personalRating != null) {
+          parts.push(`My ${personalRating.toFixed(1)}`);
+        }
+        if (communityRating != null) {
+          parts.push(`Community ${communityRating.toFixed(1)}`);
+        }
+        rating.innerHTML = `${icons.star(true)}<span>${parts.join(
+          " · "
+        )} / 5</span>`;
+      } else {
+        rating.textContent = "No ratings yet";
       }
 
       header.append(titleBlock, rating);
@@ -331,10 +342,14 @@
       title: book.title,
       author: book.author,
       description: book.description,
+      quote: book.quote,
       coverImageUrl: book.coverImageUrl,
       category: book.category,
+      status: book.status,
       isFavorite: !book.isFavorite,
-      rating: book.rating,
+      personalRating: book.personalRating,
+      publicRating: book.publicRating,
+      isbn: book.isbn,
     };
 
     try {
@@ -385,7 +400,9 @@
       category: emptyToNull(formData.get("category")),
       description: emptyToNull(formData.get("description")),
       coverImageUrl: emptyToNull(formData.get("coverImageUrl")),
-      rating: toNullableNumber(formData.get("rating")),
+      status: 'plan-to-read',
+      personalRating: toNullableNumber(formData.get("rating")),
+      publicRating: null,
       isFavorite: formFields.isFavorite?.checked ?? false,
     };
 

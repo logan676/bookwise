@@ -22,6 +22,19 @@
     {
         <p class="book-author">@Model.Author</p>
     }
+    @if (Model.PersonalRating.HasValue || Model.PublicRating.HasValue)
+    {
+        <div class="book-ratings">
+            @if (Model.PersonalRating.HasValue)
+            {
+                <span class="book-rating-chip">My @Model.PersonalRating.Value.ToString("0.0")</span>
+            }
+            @if (Model.PublicRating.HasValue)
+            {
+                <span class="book-rating-chip book-rating-chip--community">Community @Model.PublicRating.Value.ToString("0.0")</span>
+            }
+        </div>
+    }
     @if (!string.IsNullOrWhiteSpace(statusLabel))
     {
         <span class="book-status" data-status="@statusKey">@statusLabel</span>

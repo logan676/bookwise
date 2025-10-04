@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BookWise.Web.Models;
 
@@ -14,6 +15,11 @@ public class Book
     [Required]
     [MaxLength(200)]
     public string Author { get; set; } = string.Empty;
+
+    public int AuthorId { get; set; }
+
+    [ForeignKey(nameof(AuthorId))]
+    public Author? AuthorDetails { get; set; }
 
     [MaxLength(2000)]
     public string? Description { get; set; }
@@ -36,11 +42,17 @@ public class Book
     public bool IsFavorite { get; set; }
 
     [Range(0, 5)]
-    public decimal? Rating { get; set; }
+    [Column("Rating")]
+    public decimal? PersonalRating { get; set; }
+
+    [Range(0, 5)]
+    public decimal? PublicRating { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset? UpdatedAt { get; set; }
 
     public ICollection<BookRemark> Remarks { get; set; } = new List<BookRemark>();
+
+    public ICollection<BookQuote> Quotes { get; set; } = new List<BookQuote>();
 }

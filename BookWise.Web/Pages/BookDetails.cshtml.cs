@@ -1,5 +1,6 @@
 using BookWise.Web.Data;
 using BookWise.Web.Models;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,137 +15,167 @@ public class BookDetailsModel : PageModel
         _context = context;
     }
 
-    public BookDetailViewModel Book { get; private set; } = BookDetailViewModel.CreateDefault();
+    public BookDetailViewModel Book { get; private set; } = BookDetailViewModel.Empty;
 
-    public async Task OnGetAsync(int? id)
+    public async Task<IActionResult> OnGetAsync(int? id)
     {
-        var detail = BookDetailViewModel.CreateDefault();
-
-        if (id.HasValue)
+        if (!id.HasValue)
         {
-            var entity = await _context.Books
-                .AsNoTracking()
-                .Include(b => b.Remarks)
-                .FirstOrDefaultAsync(b => b.Id == id.Value);
-            if (entity is not null)
-            {
-                detail.Title = string.IsNullOrWhiteSpace(entity.Title) ? detail.Title : entity.Title;
-                detail.Author = string.IsNullOrWhiteSpace(entity.Author) ? detail.Author : entity.Author;
-                detail.CoverImageUrl = string.IsNullOrWhiteSpace(entity.CoverImageUrl)
-                    ? detail.CoverImageUrl
-                    : entity.CoverImageUrl;
-
-                if (!string.IsNullOrWhiteSpace(entity.Description))
-                {
-                    detail.Description = entity.Description;
-                }
-
-                if (!string.IsNullOrWhiteSpace(entity.Category))
-                {
-                    detail.Category = entity.Category;
-                }
-
-                if (entity.Rating.HasValue)
-                {
-                    detail.Rating = entity.Rating.Value;
-                }
-
-                if (entity.Remarks?.Count > 0)
-                {
-                    detail.MyRemarks = entity.Remarks
-                        .Where(r => r.Type == BookRemarkType.Mine)
-                        .OrderByDescending(r => r.AddedOn)
-                        .Select(r => new BookRemarkViewModel(
-                            r.Title ?? "Personal Remark",
-                            r.AddedOn.UtcDateTime,
-                            r.Content))
-                        .ToList();
-
-                    detail.CommunityRemarks = entity.Remarks
-                        .Where(r => r.Type == BookRemarkType.Community)
-                        .OrderByDescending(r => r.AddedOn)
-                        .Select(r => new BookRemarkViewModel(
-                            r.Title ?? "Community Remark",
-                            r.AddedOn.UtcDateTime,
-                            r.Content))
-                        .ToList();
-                }
-            }
+            return RedirectToPage("/Index");
         }
 
-        Book = detail;
-        ViewData["Title"] = detail.Title;
+        var entity = await _context.Books
+            .AsNoTracking()
+            .Include(b => b.Remarks)
+            .FirstOrDefaultAsync(b => b.Id == id.Value);
+
+        if (entity is null)
+        {
+            return NotFound();
+        }
+
+        Book = BookDetailViewModel.FromEntity(entity);
+        ViewData["Title"] = Book.Title;
         ViewData["MainClass"] = "main-content--wide book-detail-shell";
+
+        return Page();
     }
 }
 
 public class BookDetailViewModel
 {
-    public string Title { get; set; } = "Unknown Title";
-    public string Author { get; set; } = "Unknown Author";
-    public string CoverImageUrl { get; set; } = string.Empty;
-    public DateTime PublishedOn { get; set; }
-        = new(2022, 1, 15);
-    public string Language { get; set; } = "English";
-    public int PageCount { get; set; } = 0;
-    public string? Category { get; set; }
-        = "Mystery";
-    public string? Description { get; set; }
-        = "This book was a thrilling read! The plot twists kept me guessing until the very end.";
-    public decimal? Rating { get; set; }
-        = null;
-    public List<BookRemarkViewModel> MyRemarks { get; set; } = new();
-    public List<BookRemarkViewModel> CommunityRemarks { get; set; } = new();
-    public List<BookQuote> Quotes { get; set; } = new();
-    public List<BookStatusEntry> StatusHistory { get; set; } = new();
-
-    public string PublishedOnDisplay => PublishedOn == DateTime.MinValue
-        ? "-"
-        : PublishedOn.ToString("MMMM d, yyyy");
-
-    public string PageCountDisplay => PageCount > 0 ? PageCount.ToString() : "-";
-
-    public static BookDetailViewModel CreateDefault()
+    private static readonly Dictionary<string, string> StatusLabels = new(StringComparer.OrdinalIgnoreCase)
     {
+        ["plan-to-read"] = "Want to read",
+        ["reading"] = "Currently reading",
+        ["read"] = "Finished reading"
+    };
+
+    private BookDetailViewModel()
+    {
+    }
+
+    public int Id { get; private init; }
+    public string Title { get; private init; } = string.Empty;
+    public string Author { get; private init; } = string.Empty;
+    public string? Description { get; private init; }
+    public string? CoverImageUrl { get; private init; }
+    public string? Category { get; private init; }
+    public string? Quote { get; private init; }
+    public string? ISBN { get; private init; }
+    public string Status { get; private init; } = "plan-to-read";
+    public bool IsFavorite { get; private init; }
+    public decimal? PersonalRating { get; private init; }
+    public decimal? PublicRating { get; private init; }
+    public DateTimeOffset CreatedAt { get; private init; }
+    public DateTimeOffset? UpdatedAt { get; private init; }
+    public IReadOnlyList<BookRemarkViewModel> MyRemarks { get; private init; } = Array.Empty<BookRemarkViewModel>();
+    public IReadOnlyList<BookRemarkViewModel> CommunityRemarks { get; private init; } = Array.Empty<BookRemarkViewModel>();
+
+    public static BookDetailViewModel Empty { get; } = new();
+
+    public string DisplayCoverImageUrl => string.IsNullOrWhiteSpace(CoverImageUrl)
+        ? "/img/book-placeholder.svg"
+        : CoverImageUrl;
+
+    public string DescriptionOrPlaceholder => string.IsNullOrWhiteSpace(Description)
+        ? "This book does not have a description yet."
+        : Description!;
+
+    public string CategoryOrPlaceholder => string.IsNullOrWhiteSpace(Category)
+        ? "Uncategorized"
+        : Category!;
+
+    public string? QuoteOrNull => string.IsNullOrWhiteSpace(Quote) ? null : Quote;
+
+    public string ISBNDisplay => string.IsNullOrWhiteSpace(ISBN) ? "—" : ISBN!;
+
+    public string StatusDisplay => StatusLabels.TryGetValue(Status, out var label)
+        ? label
+        : Status;
+
+    public string StatusToken
+    {
+        get
+        {
+            var normalized = string.IsNullOrWhiteSpace(Status)
+                ? string.Empty
+                : Status.Trim().ToLowerInvariant();
+
+            return StatusLabels.ContainsKey(Status)
+                ? normalized
+                : string.IsNullOrEmpty(normalized) ? "custom" : normalized.Replace(' ', '-');
+        }
+    }
+
+    public bool HasPersonalRating => PersonalRating.HasValue;
+
+    public string PersonalRatingDisplay => PersonalRating.HasValue ? $"{PersonalRating:0.0}" : "—";
+
+    public bool HasPublicRating => PublicRating.HasValue;
+
+    public string PublicRatingDisplay => PublicRating.HasValue ? $"{PublicRating:0.0}" : "—";
+
+    public int PersonalRatingPercent => PersonalRating.HasValue
+        ? (int)Math.Round((double)(PersonalRating.Value / 5m * 100m))
+        : 0;
+
+    public int PublicRatingPercent => PublicRating.HasValue
+        ? (int)Math.Round((double)(PublicRating.Value / 5m * 100m))
+        : 0;
+
+    public string CreatedAtDisplay => CreatedAt.ToLocalTime().ToString("MMMM d, yyyy");
+
+    public string UpdatedAtDisplay => UpdatedAt.HasValue
+        ? UpdatedAt.Value.ToLocalTime().ToString("MMMM d, yyyy")
+        : "—";
+
+    public static BookDetailViewModel FromEntity(Book entity)
+    {
+        var remarks = entity.Remarks ?? new List<BookRemark>();
+
+        var myRemarks = remarks
+            .Where(r => r.Type == BookRemarkType.Mine)
+            .OrderByDescending(r => r.AddedOn)
+            .Select(r => new BookRemarkViewModel(
+                string.IsNullOrWhiteSpace(r.Title) ? "Personal Remark" : r.Title!,
+                r.AddedOn.UtcDateTime,
+                r.Content))
+            .ToList();
+
+        var communityRemarks = remarks
+            .Where(r => r.Type == BookRemarkType.Community)
+            .OrderByDescending(r => r.AddedOn)
+            .Select(r => new BookRemarkViewModel(
+                string.IsNullOrWhiteSpace(r.Title) ? "Community Remark" : r.Title!,
+                r.AddedOn.UtcDateTime,
+                r.Content))
+            .ToList();
+
+        var status = string.IsNullOrWhiteSpace(entity.Status)
+            ? "plan-to-read"
+            : entity.Status.Trim();
+
         return new BookDetailViewModel
         {
-            Title = "The Silent Observer",
-            Author = "Amelia Stone",
-            CoverImageUrl = "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=420&q=80",
-            PublishedOn = new DateTime(2022, 1, 15),
-            Language = "English",
-            PageCount = 320,
-            MyRemarks = new List<BookRemarkViewModel>
-            {
-                new(
-                    "My Thoughts",
-                    new DateTime(2023, 3, 10),
-                    "This book was a thrilling read! The plot twists kept me guessing until the very end. Highly recommend for mystery lovers.")
-            },
-            CommunityRemarks = new List<BookRemarkViewModel>
-            {
-                new(
-                    "Staff Recommendation",
-                    new DateTime(2023, 3, 9),
-                    "Our local book club loved discussing the intricate motives in chapter twelve.")
-            },
-            Quotes = new List<BookQuote>
-            {
-                new("The truth is a whisper; not a shout. You must learn to listen.", new DateTime(2023, 4, 5)),
-                new("A shadow can only exist where there is light.", new DateTime(2023, 4, 2))
-            },
-            StatusHistory = new List<BookStatusEntry>
-            {
-                new("read", "Read", "Completed on March 20, 2023"),
-                new("reading", "In Reading", "Started on March 10, 2023"),
-                new("plan", "Want to Read", "Added on February 28, 2023")
-            }
+            Id = entity.Id,
+            Title = entity.Title,
+            Author = entity.Author,
+            Description = entity.Description,
+            CoverImageUrl = entity.CoverImageUrl,
+            Category = entity.Category,
+            Quote = entity.Quote,
+            ISBN = entity.ISBN,
+            Status = status,
+            IsFavorite = entity.IsFavorite,
+            PersonalRating = entity.PersonalRating,
+            PublicRating = entity.PublicRating,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt,
+            MyRemarks = myRemarks,
+            CommunityRemarks = communityRemarks
         };
     }
 }
 
 public record BookRemarkViewModel(string Title, DateTime AddedOn, string Content);
-
-public record BookQuote(string Text, DateTime AddedOn);
-
-public record BookStatusEntry(string Type, string Label, string Description);

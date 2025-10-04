@@ -2,6 +2,9 @@
 @model BookWise.Web.Pages.BookDetailsModel
 @{
     var book = Model.Book;
+    var hasMyRemarks = book.MyRemarks.Any();
+    var hasCommunityRemarks = book.CommunityRemarks.Any();
+    var hasQuote = book.QuoteOrNull is not null;
 }
 
 <div class="book-detail">
@@ -15,41 +18,127 @@
         <aside class="book-detail-sidebar">
             <div class="book-hero-card">
                 <div class="book-hero-cover">
-                    <img src="@book.CoverImageUrl"
-                         alt="@book.Title cover"
+                    <img src="@book.DisplayCoverImageUrl"
+                         alt="Cover of @book.Title"
                          loading="lazy" />
                 </div>
                 <div class="book-hero-meta">
                     <h1 class="book-hero-title">@book.Title</h1>
                     <p class="book-hero-author">by @book.Author</p>
+                    <div class="book-hero-tags" role="list">
+                        <span class="status-pill status-pill--@book.StatusToken" role="listitem">@book.StatusDisplay</span>
+                        <span class="rating-chip @(book.HasPersonalRating ? string.Empty : "rating-chip--empty")" role="listitem" aria-label="My rating @(book.HasPersonalRating ? book.PersonalRatingDisplay : "not set")">
+                            <span class="rating-chip-label">My rating</span>
+                            <span class="rating-chip-value">@book.PersonalRatingDisplay</span>
+                            <span class="rating-chip-scale">/5</span>
+                        </span>
+                        <span class="rating-chip rating-chip--public @(book.HasPublicRating ? string.Empty : "rating-chip--empty")" role="listitem" aria-label="Community rating @(book.HasPublicRating ? book.PublicRatingDisplay : "not available")">
+                            <span class="rating-chip-label">Community</span>
+                            <span class="rating-chip-value">@book.PublicRatingDisplay</span>
+                            <span class="rating-chip-scale">/5</span>
+                        </span>
+                        <span class="favorite-chip @(book.IsFavorite ? "favorite-chip--active" : string.Empty)" role="listitem">
+                            <span class="favorite-icon" aria-hidden="true"></span>
+                            @(book.IsFavorite ? "Favorite" : "Not favorite")
+                        </span>
+                    </div>
                 </div>
+
+                <dl class="book-primary-facts">
+                    <div class="book-primary-fact">
+                        <dt>Category</dt>
+                        <dd>@book.CategoryOrPlaceholder</dd>
+                    </div>
+                    <div class="book-primary-fact">
+                        <dt>ISBN</dt>
+                        <dd>@book.ISBNDisplay</dd>
+                    </div>
+                    <div class="book-primary-fact">
+                        <dt>Added</dt>
+                        <dd>@book.CreatedAtDisplay</dd>
+                    </div>
+                    <div class="book-primary-fact">
+                        <dt>Updated</dt>
+                        <dd>@book.UpdatedAtDisplay</dd>
+                    </div>
+                </dl>
             </div>
         </aside>
 
         <section class="book-detail-content">
-            <section class="book-panel">
+            <section class="book-panel book-panel--overview">
                 <header class="book-panel-header">
-                    <h2>Book Details</h2>
+                    <h2>Overview</h2>
                 </header>
-                <dl class="book-facts">
+                <p class="book-description">@book.DescriptionOrPlaceholder</p>
+            </section>
+
+            <section class="book-panel book-panel--library">
+                <header class="book-panel-header">
+                    <h2>Library Record</h2>
+                </header>
+                <dl class="book-facts book-facts--library">
                     <div class="book-fact">
-                        <dt>Author</dt>
-                        <dd>@book.Author</dd>
+                        <dt>Status</dt>
+                        <dd>
+                            <span class="status-pill status-pill--@book.StatusToken">@book.StatusDisplay</span>
+                        </dd>
                     </div>
                     <div class="book-fact">
-                        <dt>Published</dt>
-                        <dd>@book.PublishedOnDisplay</dd>
+                        <dt>Favorite</dt>
+                        <dd>
+                            <span class="favorite-flag @(book.IsFavorite ? "favorite-flag--yes" : string.Empty)">
+                                @(book.IsFavorite ? "Yes" : "No")
+                            </span>
+                        </dd>
                     </div>
-                    <div class="book-fact">
-                        <dt>Language</dt>
-                        <dd>@book.Language</dd>
+                    <div class="book-fact book-fact--rating">
+                        <dt>My Rating</dt>
+                        <dd>
+                            @if (book.HasPersonalRating)
+                            {
+                                <div class="rating-meter" role="img" aria-label="My rating @book.PersonalRatingDisplay out of 5">
+                                    <div class="rating-meter-fill" style="width: @book.PersonalRatingPercent%"></div>
+                                </div>
+                                <span class="rating-meter-value">@book.PersonalRatingDisplay<span class="rating-meter-scale">/5</span></span>
+                            }
+                            else
+                            {
+                                <span class="rating-empty">Not yet rated</span>
+                            }
+                        </dd>
                     </div>
-                    <div class="book-fact">
-                        <dt>Pages</dt>
-                        <dd>@book.PageCountDisplay</dd>
+                    <div class="book-fact book-fact--rating">
+                        <dt>Community Rating</dt>
+                        <dd>
+                            @if (book.HasPublicRating)
+                            {
+                                <div class="rating-meter" role="img" aria-label="Community rating @book.PublicRatingDisplay out of 5">
+                                    <div class="rating-meter-fill" style="width: @book.PublicRatingPercent%"></div>
+                                </div>
+                                <span class="rating-meter-value">@book.PublicRatingDisplay<span class="rating-meter-scale">/5</span></span>
+                            }
+                            else
+                            {
+                                <span class="rating-empty">Not available</span>
+                            }
+                        </dd>
                     </div>
                 </dl>
             </section>
+
+            @if (hasQuote)
+            {
+                <section class="book-panel book-panel--quote">
+                    <header class="book-panel-header">
+                        <h2>Featured Quote</h2>
+                    </header>
+                    <figure class="quote-feature">
+                        <blockquote class="quote-feature-text">“@book.QuoteOrNull”</blockquote>
+                        <figcaption class="quote-feature-meta">— @book.Author</figcaption>
+                    </figure>
+                </section>
+            }
 
             <section class="book-panel">
                 <header class="book-panel-header">
@@ -61,7 +150,7 @@
                 </header>
 
                 <div class="remark-list">
-                    @if (book.MyRemarks.Any())
+                    @if (hasMyRemarks)
                     {
                         foreach (var remark in book.MyRemarks)
                         {
@@ -90,7 +179,7 @@
                 </header>
 
                 <div class="remark-list">
-                    @if (book.CommunityRemarks.Any())
+                    @if (hasCommunityRemarks)
                     {
                         foreach (var remark in book.CommunityRemarks)
                         {
@@ -112,56 +201,6 @@
                     }
                 </div>
             </section>
-
-            <section class="book-panel">
-                <header class="book-panel-header">
-                    <h2>Favorite Quotes</h2>
-                    <div class="panel-actions">
-                        <button class="panel-action" type="button">
-                            <span class="panel-action-icon panel-action-icon--quotes" aria-hidden="true"></span>
-                            View All
-                        </button>
-                        <button class="panel-action panel-action--primary" type="button">
-                            <span class="panel-action-icon panel-action-icon--add" aria-hidden="true"></span>
-                            Add Quote
-                        </button>
-                    </div>
-                </header>
-
-                <div class="quote-list">
-                    @foreach (var quote in book.Quotes)
-                    {
-                        <figure class="quote-card">
-                            <blockquote class="quote-text">&ldquo;@quote.Text&rdquo;</blockquote>
-                            <figcaption class="quote-meta">Added on @quote.AddedOn.ToString("MMMM d, yyyy")</figcaption>
-                        </figure>
-                    }
-                </div>
-            </section>
-
-            <section class="book-panel">
-                <header class="book-panel-header">
-                    <h2>Status Log</h2>
-                </header>
-                <ol class="status-log" aria-label="Reading status history">
-                    @foreach (var status in book.StatusHistory)
-                    {
-                        <li class="status-entry">
-                            <div class="status-icon" data-status="@status.Type" aria-hidden="true"></div>
-                            <div class="status-content">
-                                <p class="status-label">@status.Label</p>
-                                <p class="status-date">@status.Description</p>
-                            </div>
-                        </li>
-                    }
-                </ol>
-            </section>
         </section>
     </div>
 </div>
-
-@section Scripts {
-    <script>
-        // Placeholder for future interactive behaviors specific to the book details page.
-    </script>
-}
