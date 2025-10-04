@@ -62,6 +62,21 @@
             <!-- Results will be populated by JavaScript -->
         </div>
     </div>
+
+    <!-- Activity Log -->
+    <div class="activity-log-container" id="activity-log">
+        <div class="activity-log-header">
+            <h2 class="activity-log-title">Activity Timeline</h2>
+            <button type="button" class="clear-log-btn" id="clear-log">
+                Clear log
+            </button>
+        </div>
+        <div class="activity-log-body" id="activity-log-entries" aria-live="polite">
+            <div class="activity-log-empty" id="activity-log-empty" data-empty-state>
+                <p>Start a search to inspect every request and response that powers this page.</p>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {
@@ -74,6 +89,9 @@
         const resultsList = document.getElementById('results-list');
         const startSearchingBtn = document.getElementById('start-searching');
         const searchFeedback = document.getElementById('search-feedback');
+        const activityLogEntries = document.getElementById('activity-log-entries');
+        const activityLogEmpty = document.getElementById('activity-log-empty');
+        const clearLogButton = document.getElementById('clear-log');
         const placeholderCover = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="60" height="90"><rect width="100%" height="100%" fill="#e2e8f0"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#64748b">No Cover</text></svg>');
 
         startSearchingBtn?.addEventListener('click', () => {
@@ -95,6 +113,8 @@
 
         searchButton.addEventListener('click', handleSearch);
 
+        clearLogButton?.addEventListener('click', resetActivityLog);
+
         resultsList.addEventListener('click', (event) => {
             const button = event.target.closest('.add-book-btn');
             if (!button) {
@@ -102,6 +122,13 @@
             }
 
             const { title, author } = button.dataset;
+            logActivity('Add book requested', {
+                details: {
+                    title,
+                    author
+                },
+                variant: 'info'
+            });
             addBook(title ?? '', author ?? '');
         });
 
@@ -110,6 +137,9 @@
             searchResults.style.display = 'none';
             resultsList.innerHTML = '';
             setFeedback('');
+            if (hasActivityLogEntries()) {
+                logActivity('Reset search state', { variant: 'info' });
+            }
         }
 
         function setFeedback(message, state) {
@@ -144,29 +174,130 @@
             setFeedback('Searching for books...');
 
             try {
-                const response = await fetch('/api/book-search', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ query })
+                logActivity('Search submitted', {
+                    details: { query },
+                    variant: 'info'
                 });
+                logActivity('Dispatching request', {
+                    details: {
+                        method: 'POST',
+                        url: '/api/book-search',
+                        payload: { query }
+                    },
+                    variant: 'info'
+                });
+                
+                let response;
+                let usedFallback = false;
+                
+                try {
+                    response = await fetch('/api/book-search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ query })
+                    });
+                } catch (error) {
+                    // If main search fails, try fallback for Chinese text
+                    logActivity('Main search failed, trying fallback', {
+                        details: { originalError: error.message },
+                        variant: 'warning'
+                    });
+                    
+                    response = await fetch('/api/book-search-fallback', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ query })
+                    });
+                    usedFallback = true;
+                }
 
                 if (!response.ok) {
-                    throw new Error('Search request failed');
+                    // If main search returns error status, try fallback for Chinese text
+                    if (!usedFallback && (response.status === 408 || response.status >= 500)) {
+                        logActivity('Main search returned error, trying fallback', {
+                            details: {
+                                status: response.status,
+                                statusText: response.statusText
+                            },
+                            variant: 'warning'
+                        });
+                        
+                        try {
+                            response = await fetch('/api/book-search-fallback', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ query })
+                            });
+                            usedFallback = true;
+                        } catch (fallbackError) {
+                            logActivity('Fallback search also failed', {
+                                details: { error: fallbackError.message },
+                                variant: 'error'
+                            });
+                            throw new Error('Both main and fallback search failed');
+                        }
+                    }
+                    
+                    if (!response.ok) {
+                        logActivity('Response received with error status', {
+                            details: {
+                                status: response.status,
+                                statusText: response.statusText
+                            },
+                            variant: 'error'
+                        });
+                        throw new Error('Search request failed');
+                    }
                 }
 
                 const data = await response.json();
                 const books = Array.isArray(data.books) ? data.books : [];
 
+                logActivity(`Response received${usedFallback ? ' (using fallback)' : ''}`, {
+                    details: {
+                        status: response.status,
+                        statusText: response.statusText,
+                        totalBooks: books.length,
+                        usedFallback: usedFallback,
+                        sample: books.slice(0, 3).map((book) => ({
+                            title: book.title,
+                            author: book.author,
+                            published: book.published
+                        }))
+                    },
+                    variant: 'success'
+                });
+
                 if (books.length === 0) {
-                    setFeedback('No matching books found. Try a different keyword.', 'error');
+                    logActivity('No matching books found', {
+                        details: { query, usedFallback },
+                        variant: 'warning'
+                    });
+                    setFeedback(usedFallback ? 
+                        'No fallback suggestions available for this search term.' : 
+                        'No matching books found. Try a different keyword.', 'error');
                     return;
                 }
 
-                setFeedback(`Showing ${books.length} suggestion${books.length === 1 ? '' : 's'}.`, 'success');
+                setFeedback(`Showing ${books.length} suggestion${books.length === 1 ? '' : 's'}${usedFallback ? ' (offline suggestions)' : ''}.`, 'success');
+                logActivity('Suggestions ready', {
+                    details: {
+                        count: books.length
+                    },
+                    variant: 'success'
+                });
                 renderResults(books);
             } catch (error) {
+                logActivity('Search request failed', {
+                    details: error instanceof Error ? error.message : String(error),
+                    variant: 'error'
+                });
                 setFeedback('There was an issue fetching suggestions. Please try again.', 'error');
             } finally {
                 searchButton.disabled = false;
@@ -253,7 +384,88 @@
 
         function addBook(title, author) {
             alert(`Added "${title}" by ${author} to your library!`);
+            logActivity('Redirecting to library', {
+                variant: 'info'
+            });
             window.location.href = '/';
+        }
+
+        function logActivity(message, options = {}) {
+            const { details, variant = 'info' } = options;
+            if (!activityLogEntries) {
+                return;
+            }
+
+            hideActivityLogEmptyState();
+
+            const entry = document.createElement('div');
+            entry.className = `activity-log-entry activity-log-entry--${variant}`;
+
+            const header = document.createElement('div');
+            header.className = 'activity-log-entry-header';
+
+            const timestamp = document.createElement('span');
+            timestamp.className = 'activity-log-timestamp';
+            timestamp.textContent = new Date().toLocaleTimeString();
+
+            const messageSpan = document.createElement('span');
+            messageSpan.className = 'activity-log-message';
+            messageSpan.textContent = message;
+
+            header.append(timestamp, messageSpan);
+            entry.append(header);
+
+            if (details !== undefined) {
+                const detailsBlock = document.createElement('pre');
+                detailsBlock.className = 'activity-log-details';
+                detailsBlock.textContent = formatLogDetails(details);
+                entry.append(detailsBlock);
+            }
+
+            activityLogEntries.append(entry);
+            activityLogEntries.scrollTop = activityLogEntries.scrollHeight;
+        }
+
+        function hideActivityLogEmptyState() {
+            if (activityLogEmpty) {
+                activityLogEmpty.style.display = 'none';
+            }
+        }
+
+        function showActivityLogEmptyState() {
+            if (activityLogEmpty) {
+                activityLogEmpty.style.display = 'flex';
+            }
+        }
+
+        function resetActivityLog() {
+            if (!activityLogEntries) {
+                return;
+            }
+
+            const entries = activityLogEntries.querySelectorAll('.activity-log-entry');
+            entries.forEach((entry) => entry.remove());
+            showActivityLogEmptyState();
+        }
+
+        function hasActivityLogEntries() {
+            return Boolean(activityLogEntries?.querySelector('.activity-log-entry'));
+        }
+
+        function formatLogDetails(details) {
+            if (details === null || details === undefined) {
+                return '';
+            }
+
+            if (typeof details === 'string') {
+                return details;
+            }
+
+            try {
+                return JSON.stringify(details, null, 2);
+            } catch {
+                return String(details);
+            }
         }
 
         showEmptyState();
