@@ -1,5 +1,6 @@
 :root {
   --brand-600: #0d6efd;
+  --brand-700: #0a58ca;
   --brand-500: #1ea7fd;
   --gray-900: #0f172a;
   --gray-800: #1f2937;
@@ -15,6 +16,7 @@
 
 :root[data-theme="forest"] {
   --brand-600: #166534;
+  --brand-700: #14532d;
   --brand-500: #22c55e;
   --gray-900: #0f1f1a;
   --gray-800: #1e362b;
@@ -28,6 +30,7 @@
 
 :root[data-theme="ocean"] {
   --brand-600: #0f4c75;
+  --brand-700: #0c3d5f;
   --brand-500: #00a8e8;
   --gray-900: #0d1b2a;
   --gray-800: #1b2838;
@@ -41,6 +44,7 @@
 
 :root[data-theme="sunset"] {
   --brand-600: #c2410c;
+  --brand-700: #9a3412;
   --brand-500: #fb923c;
   --gray-900: #2b1a14;
   --gray-800: #3f2a22;
@@ -980,22 +984,25 @@ a:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: var(--brand-600);
+  background: linear-gradient(135deg, var(--brand-600) 0%, var(--brand-700) 100%);
   color: white;
-  border: none;
+  border: 2px solid transparent;
   border-radius: 8px;
   padding: 0.75rem 1.5rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   text-decoration: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .add-book-btn:hover {
-  background: #0a58ca;
+  background: linear-gradient(135deg, var(--brand-700) 0%, var(--brand-600) 100%);
+  border-color: var(--brand-500);
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(13, 110, 253, 0.2);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  color: white;
 }
 
 .add-book-btn .icon {
@@ -2203,7 +2210,7 @@ a:hover {
     var(--brand-700) 100%
   );
   color: white;
-  border: none;
+  border: 2px solid transparent;
   border-radius: 12px;
   padding: 1rem 1.5rem;
   font-weight: 600;
@@ -2211,11 +2218,14 @@ a:hover {
   cursor: pointer;
   transition: all 0.3s ease;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   position: relative;
   overflow: hidden;
+  min-width: 140px;
+  justify-content: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .search-result-item .add-book-btn::before {
@@ -2239,14 +2249,37 @@ a:hover {
 }
 
 .search-result-item .add-book-btn:hover {
-  background: linear-gradient(135deg, #0a58ca 0%, #084298 100%);
+  background: linear-gradient(135deg, var(--brand-700) 0%, var(--brand-600) 100%);
+  border-color: var(--brand-500);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(13, 110, 253, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  color: white;
 }
 
 .search-result-item .add-book-btn:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.search-result-item .add-book-btn:focus {
+  outline: none;
+  border-color: var(--brand-500);
+  box-shadow: 0 0 0 3px rgba(var(--brand-600), 0.2);
+}
+
+.search-result-item .add-book-btn:disabled {
+  background: var(--gray-400);
+  color: var(--gray-600);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-color: transparent;
+}
+
+.search-result-item .add-book-btn:disabled:hover {
+  background: var(--gray-400);
+  transform: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .search-result-item .add-book-btn svg {
