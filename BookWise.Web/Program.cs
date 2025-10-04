@@ -31,6 +31,12 @@ builder.Services.AddHttpClient("DeepSeek", client =>
     PooledConnectionLifetime = TimeSpan.FromMinutes(2)
 });
 
+builder.Services.AddHttpClient("GoogleBooks", client =>
+{
+    client.BaseAddress = new Uri("https://www.googleapis.com/books/v1/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddDbContext<BookWiseContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -200,7 +206,8 @@ books.MapDelete("/{id:int}", async (int id, BookWiseContext db) =>
 app.MapPost("/api/book-search", async Task<IResult> (
     [FromBody] BookSearchRequest request,
     IHttpClientFactory httpClientFactory,
-    IConfiguration configuration) =>
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
 {
     static string? ExtractJsonObject(string value)
     {
@@ -364,7 +371,9 @@ app.MapPost("/api/book-search", async Task<IResult> (
             return Results.Problem("DeepSeek response was missing the books collection.", statusCode: StatusCodes.Status502BadGateway);
         }
 
-        return Results.Ok(suggestions);
+        var enriched = await BookSearchEnrichment.EnrichCoverImagesAsync(suggestions.Books, httpClientFactory, cancellationToken);
+
+        return Results.Ok(new BookSearchResponse(enriched));
     }
     catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
     {
@@ -459,4 +468,135 @@ static class JsonOptions
     {
         PropertyNameCaseInsensitive = true
     };
+}
+
+static class BookSearchEnrichment
+{
+    public static async Task<BookSuggestion[]> EnrichCoverImagesAsync(
+        BookSuggestion[] books,
+        IHttpClientFactory httpClientFactory,
+        CancellationToken cancellationToken)
+    {
+        if (books.Length == 0)
+        {
+            return books;
+        }
+
+        var client = httpClientFactory.CreateClient("GoogleBooks");
+        var enriched = new BookSuggestion[books.Length];
+
+        for (var i = 0; i < books.Length; i++)
+        {
+            var book = books[i];
+            if (!string.IsNullOrWhiteSpace(book.CoverImageUrl))
+            {
+                enriched[i] = book;
+                continue;
+            }
+
+            var coverUrl = await TryFetchCoverUrlAsync(client, book, cancellationToken);
+            enriched[i] = !string.IsNullOrWhiteSpace(coverUrl)
+                ? book with { CoverImageUrl = coverUrl }
+                : book;
+        }
+
+        return enriched;
+    }
+
+    private static async Task<string?> TryFetchCoverUrlAsync(HttpClient client, BookSuggestion book, CancellationToken cancellationToken)
+    {
+        var querySegments = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(book.Title))
+        {
+            querySegments.Add($"intitle:{book.Title}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(book.Author))
+        {
+            querySegments.Add($"inauthor:{book.Author}");
+        }
+
+        if (querySegments.Count == 0)
+        {
+            return null;
+        }
+
+        var requestUri = $"volumes?q={Uri.EscapeDataString(string.Join(" ", querySegments))}&maxResults=1&printType=books&fields=items(volumeInfo/imageLinks/thumbnail,imageLinks/smallThumbnail)";
+
+        try
+        {
+            using var response = await client.GetAsync(requestUri, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (!document.RootElement.TryGetProperty("items", out var itemsElement) ||
+                itemsElement.ValueKind != JsonValueKind.Array ||
+                itemsElement.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            var firstItem = itemsElement[0];
+            if (!firstItem.TryGetProperty("volumeInfo", out var volumeInfo) ||
+                volumeInfo.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            if (!volumeInfo.TryGetProperty("imageLinks", out var imageLinks) ||
+                imageLinks.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            static string? ReadImageLink(JsonElement element)
+            {
+                if (element.ValueKind != JsonValueKind.Object)
+                {
+                    return null;
+                }
+
+                if (element.TryGetProperty("thumbnail", out var thumb) && thumb.ValueKind == JsonValueKind.String)
+                {
+                    return thumb.GetString();
+                }
+
+                if (element.TryGetProperty("smallThumbnail", out var small) && small.ValueKind == JsonValueKind.String)
+                {
+                    return small.GetString();
+                }
+
+                return null;
+            }
+
+            var link = ReadImageLink(imageLinks);
+            return NormalizeCoverUrl(link);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? NormalizeCoverUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
+        var trimmed = url.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = "https://" + trimmed[7..];
+        }
+
+        return trimmed.Replace("&edge=curl", string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
 }
