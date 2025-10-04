@@ -14,7 +14,7 @@ namespace BookWise.Web.Services.CommunityContent;
 
 public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresher
 {
-    private const int MaxItems = 10;
+    private const int MaxItems = 3; // Changed to 3 for top 3 quotes and remarks
 
     private readonly BookWiseContext _dbContext;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -40,6 +40,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
         var book = await _dbContext.Books
             .Include(b => b.Quotes)
             .Include(b => b.Remarks)
+            .Include(b => b.AuthorDetails)
             .FirstOrDefaultAsync(b => b.Id == workItem.BookId, cancellationToken);
 
         if (book is null)
@@ -57,8 +58,16 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
         }
 
         var client = _httpClientFactory.CreateClient("DoubanBooks");
+        
+        // Task 1: Fetch community quotes and remarks
         var quotes = await FetchCommunityQuotesAsync(client, workItem.DoubanSubjectId, cancellationToken);
         var remarks = await FetchCommunityRemarksAsync(client, workItem.DoubanSubjectId, cancellationToken);
+
+        // Task 2: Fetch author profile information
+        if (book.AuthorDetails != null)
+        {
+            await FetchAndUpdateAuthorProfileAsync(client, book.AuthorDetails, workItem.DoubanSubjectId, cancellationToken);
+        }
 
         var existingQuotes = book.Quotes
             .Where(q => q.Origin == BookQuoteSource.Community)
@@ -102,6 +111,136 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             book.Id,
             quoteEntities.Count,
             remarkEntities.Count);
+    }
+
+    private async Task FetchAndUpdateAuthorProfileAsync(HttpClient client, Author author, string doubanSubjectId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // First, try to extract author ID from the book page
+            var authorDoubanId = await ExtractAuthorDoubanIdAsync(client, doubanSubjectId, cancellationToken);
+            if (string.IsNullOrWhiteSpace(authorDoubanId))
+            {
+                _logger.LogWarning("Could not extract Douban author ID for author {AuthorName} from subject {SubjectId}", author.Name, doubanSubjectId);
+                return;
+            }
+
+            // Fetch author profile from Douban
+            var profile = await FetchAuthorProfileAsync(client, authorDoubanId, cancellationToken);
+            if (profile == null)
+            {
+                _logger.LogWarning("Could not fetch author profile for author {AuthorName} with Douban ID {AuthorId}", author.Name, authorDoubanId);
+                return;
+            }
+
+            // Update author profile information
+            author.ProfileSummary = CreateBookRequest.TrimToLength(profile.Summary, 2000);
+            author.ProfileNotableWorks = CreateBookRequest.TrimToLength(profile.NotableWorks, 1000);
+            author.ProfileRefreshedAt = DateTimeOffset.UtcNow;
+            author.UpdatedAt = DateTimeOffset.UtcNow;
+
+            _logger.LogInformation("Updated author profile for {AuthorName} (Douban ID: {AuthorId})", author.Name, authorDoubanId);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch author profile for {AuthorName}", author.Name);
+        }
+    }
+
+    private async Task<string?> ExtractAuthorDoubanIdAsync(HttpClient client, string subjectId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await client.GetAsync($"subject/{subjectId}/", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var html = await response.Content.ReadAsStringAsync(cancellationToken);
+            var document = new HtmlDocument();
+            document.LoadHtml(html);
+
+            // Look for author link in the book details
+            var authorLink = document.DocumentNode
+                .SelectSingleNode("//span[text()='作者:']/following-sibling::a[1]/@href");
+
+            if (authorLink?.GetAttributeValue("href", "") is string href && !string.IsNullOrEmpty(href))
+            {
+                // Extract ID from URL like https://book.douban.com/author/27557670/
+                var match = System.Text.RegularExpressions.Regex.Match(href, @"/author/(\d+)/");
+                if (match.Success)
+                {
+                    return match.Groups[1].Value;
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to extract author Douban ID from subject {SubjectId}", subjectId);
+            return null;
+        }
+    }
+
+    private async Task<AuthorProfile?> FetchAuthorProfileAsync(HttpClient client, string authorId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // Create a new client for author pages since they might be on a different subdomain
+            using var authorClient = _httpClientFactory.CreateClient();
+            authorClient.BaseAddress = new Uri("https://www.douban.com/");
+            authorClient.Timeout = TimeSpan.FromSeconds(10);
+            authorClient.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 (+https://bookwise.local)");
+
+            using var response = await authorClient.GetAsync($"personage/{authorId}/", cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var html = await response.Content.ReadAsStringAsync(cancellationToken);
+            var document = new HtmlDocument();
+            document.LoadHtml(html);
+
+            // Extract profile summary
+            var summaryNode = document.DocumentNode
+                .SelectSingleNode("//div[@class='bd']/div[@class='intro']") ??
+                document.DocumentNode
+                .SelectSingleNode("//div[@class='intro']");
+            
+            var summary = summaryNode?.InnerText;
+            if (!string.IsNullOrWhiteSpace(summary))
+            {
+                summary = NormalizeWhitespace(HtmlEntity.DeEntitize(summary));
+            }
+
+            // Extract notable works
+            var worksNodes = document.DocumentNode
+                .SelectNodes("//div[@class='works']//li/a");
+            
+            var notableWorks = worksNodes?
+                .Take(5) // Top 5 works
+                .Select(node => NormalizeWhitespace(HtmlEntity.DeEntitize(node.InnerText)))
+                .Where(work => !string.IsNullOrWhiteSpace(work))
+                .ToList();
+
+            var worksText = notableWorks?.Count > 0 
+                ? string.Join(", ", notableWorks)
+                : null;
+
+            return new AuthorProfile(summary, worksText);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to fetch author profile from Douban for author ID {AuthorId}", authorId);
+            return null;
+        }
     }
 
     private async Task<List<CommunityQuote>> FetchCommunityQuotesAsync(HttpClient client, string subjectId, CancellationToken cancellationToken)
@@ -327,4 +466,6 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
     private sealed record CommunityQuote(string Text, string? Source);
 
     private sealed record CommunityRemark(string Content, string? Title);
+
+    private sealed record AuthorProfile(string? Summary, string? NotableWorks);
 }

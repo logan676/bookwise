@@ -11,6 +11,7 @@ using BookWise.Web.Data;
 using BookWise.Web.Models;
 using BookWise.Web.Options;
 using BookWise.Web.Services.Authors;
+using BookWise.Web.Services.CommunityContent;
 using BookWise.Web.Services.Recommendations;
 using HtmlAgilityPack;
 using Microsoft.AspNetCore.Http;
@@ -46,6 +47,12 @@ builder.Services.AddSingleton<AuthorRecommendationQueue>();
 builder.Services.AddSingleton<IAuthorRecommendationScheduler, AuthorRecommendationScheduler>();
 builder.Services.AddScoped<IAuthorRecommendationRefresher, AuthorRecommendationRefresher>();
 builder.Services.AddHostedService<AuthorRecommendationWorker>();
+
+// Community Content Services
+builder.Services.AddSingleton<BookWise.Web.Services.CommunityContent.BookCommunityContentQueue>();
+builder.Services.AddSingleton<BookWise.Web.Services.CommunityContent.IBookCommunityContentScheduler, BookWise.Web.Services.CommunityContent.BookCommunityContentScheduler>();
+builder.Services.AddScoped<BookWise.Web.Services.CommunityContent.IBookCommunityContentRefresher, BookWise.Web.Services.CommunityContent.BookCommunityContentRefresher>();
+builder.Services.AddHostedService<BookWise.Web.Services.CommunityContent.BookCommunityContentWorker>();
 builder.Services.AddHttpClient<IDeepSeekRecommendationClient, DeepSeekRecommendationClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<IOptions<DeepSeekOptions>>().Value;
@@ -247,6 +254,7 @@ books.MapPost("", async (
     BookWiseContext db,
     ILogger<Program> logger,
     IAuthorRecommendationScheduler recommendationScheduler,
+    IBookCommunityContentScheduler communityContentScheduler,
     CancellationToken cancellationToken) =>
 {
     var operationId = Guid.NewGuid();
@@ -290,7 +298,11 @@ books.MapPost("", async (
         await db.Books.AddAsync(entity, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
+        // Schedule async tasks for the created book
         await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { author.Name }, cancellationToken);
+        
+        // Schedule community content fetch (author info, popular remarks, and quotes)
+        await communityContentScheduler.ScheduleFetchAsync(entity.Id, normalizedRequest.DoubanSubjectId, cancellationToken);
 
         timer.Stop();
         logger.LogInformation(
