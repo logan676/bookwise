@@ -89,7 +89,7 @@
             </svg>
         </button>
         <header class="status-modal-header">
-            <p class="status-modal-eyebrow" id="status-modal-description">Choose how you want to track this title.</p>
+            <p class="status-modal-eyebrow" id="status-modal-description">How would you like to add this to your library?</p>
             <h2 class="status-modal-title" id="status-modal-title">Book Title</h2>
             <p class="status-modal-book" id="status-modal-book"></p>
         </header>
@@ -492,10 +492,26 @@
                     let message = 'We could not add this book right now. Please try again.';
                     try {
                         const errorBody = await response.json();
-                        message = errorBody?.detail
-                            ?? errorBody?.title
-                            ?? errorBody?.message
-                            ?? message;
+                        
+                        // Handle validation errors specifically
+                        if (response.status === 400 && errorBody?.errors) {
+                            const validationErrors = [];
+                            for (const [field, messages] of Object.entries(errorBody.errors)) {
+                                if (Array.isArray(messages)) {
+                                    validationErrors.push(...messages);
+                                } else {
+                                    validationErrors.push(messages);
+                                }
+                            }
+                            message = validationErrors.length > 0 
+                                ? `Validation error: ${validationErrors.join(', ')}`
+                                : 'Please check your input and try again.';
+                        } else {
+                            message = errorBody?.detail
+                                ?? errorBody?.title
+                                ?? errorBody?.message
+                                ?? message;
+                        }
                     } catch {
                         message = `${message} (status ${response.status})`;
                     }
@@ -614,6 +630,12 @@
 
             const title = sanitizeOptionalText(remarkTitleInput?.value, 200);
             const limitedContent = content.length > 4000 ? content.slice(0, 4000) : content;
+            
+            // Ensure Content is not empty after trimming - backend requires this
+            if (!limitedContent.trim()) {
+                return null;
+            }
+            
             return {
                 Title: title,
                 Content: limitedContent

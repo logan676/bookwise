@@ -244,46 +244,64 @@ books.MapPost("", async (
     var operationId = Guid.NewGuid();
     var timer = Stopwatch.StartNew();
 
-    var normalizedRequest = request.WithNormalizedData();
-
-    logger.LogInformation(
-        "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
-        operationId,
-        normalizedRequest.Title,
-        normalizedRequest.Author,
-        normalizedRequest.Status,
-        normalizedRequest.Category,
-        normalizedRequest.Isbn ?? "N/A",
-        normalizedRequest.PersonalRating,
-        normalizedRequest.PublicRating,
-        normalizedRequest.IsFavorite,
-        !string.IsNullOrWhiteSpace(normalizedRequest.Quote),
-        normalizedRequest.Remarks?.Length ?? 0);
-
-    var validationResults = new List<ValidationResult>();
-    if (!Validator.TryValidateObject(normalizedRequest, new ValidationContext(normalizedRequest), validationResults, true))
+    try
     {
-        logger.LogWarning("[{OperationId}] Create validation failed with {Count} errors", operationId, validationResults.Count);
-        return Results.ValidationProblem(validationResults
-            .GroupBy(r => r.MemberNames.FirstOrDefault() ?? string.Empty)
-            .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
+        var normalizedRequest = request.WithNormalizedData();
+
+        logger.LogInformation(
+            "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
+            operationId,
+            normalizedRequest.Title,
+            normalizedRequest.Author,
+            normalizedRequest.Status,
+            normalizedRequest.Category,
+            normalizedRequest.Isbn ?? "N/A",
+            normalizedRequest.PersonalRating,
+            normalizedRequest.PublicRating,
+            normalizedRequest.IsFavorite,
+            !string.IsNullOrWhiteSpace(normalizedRequest.Quote),
+            normalizedRequest.Remarks?.Length ?? 0);
+
+        var validationResults = new List<ValidationResult>();
+        if (!Validator.TryValidateObject(normalizedRequest, new ValidationContext(normalizedRequest), validationResults, true))
+        {
+            logger.LogWarning("[{OperationId}] Create validation failed with {Count} errors", operationId, validationResults.Count);
+            foreach (var error in validationResults)
+            {
+                logger.LogWarning("[{OperationId}] Validation error: {ErrorMessage} for members: {Members}", 
+                    operationId, error.ErrorMessage, string.Join(", ", error.MemberNames ?? Array.Empty<string>()));
+            }
+            return Results.ValidationProblem(validationResults
+                .GroupBy(r => r.MemberNames.FirstOrDefault() ?? string.Empty)
+                .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
+        }
+
+        var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, normalizedRequest.AuthorAvatarUrl, cancellationToken);
+        var entity = normalizedRequest.ToEntity(author);
+        CreateBookRequest.SyncQuoteSnapshot(entity);
+        await db.Books.AddAsync(entity, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+
+        await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { author.Name }, cancellationToken);
+
+        timer.Stop();
+        logger.LogInformation(
+            "[{OperationId}] Created book with id {Id} in {Elapsed} ms",
+            operationId,
+            entity.Id,
+            timer.ElapsedMilliseconds);
+        return Results.Created($"/api/books/{entity.Id}", entity);
     }
-
-    var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, normalizedRequest.AuthorAvatarUrl, cancellationToken);
-    var entity = normalizedRequest.ToEntity(author);
-    CreateBookRequest.SyncQuoteSnapshot(entity);
-    await db.Books.AddAsync(entity, cancellationToken);
-    await db.SaveChangesAsync(cancellationToken);
-
-    await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { author.Name }, cancellationToken);
-
-    timer.Stop();
-    logger.LogInformation(
-        "[{OperationId}] Created book with id {Id} in {Elapsed} ms",
-        operationId,
-        entity.Id,
-        timer.ElapsedMilliseconds);
-    return Results.Created($"/api/books/{entity.Id}", entity);
+    catch (Exception ex)
+    {
+        timer.Stop();
+        logger.LogError(ex, "[{OperationId}] Failed to create book after {Elapsed} ms", operationId, timer.ElapsedMilliseconds);
+        return Results.Problem(
+            title: "Failed to create book",
+            detail: "An error occurred while creating the book. Please try again.",
+            statusCode: 500
+        );
+    }
 });
 
 books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseContext db, ILogger<Program> logger, CancellationToken cancellationToken) =>
