@@ -606,16 +606,17 @@
 
                 const cover = book.coverImageUrl
                     ? escapeAttribute(book.coverImageUrl)
-                    : placeholderCover;
+                    : '';
 
                 const coverData = escapeAttribute(book.coverImageUrl ?? '');
+                const initialCover = cover || placeholderCover;
                 const descriptionData = escapeAttribute(book.description ?? '');
                 const categoryData = escapeAttribute(book.category ?? '');
 
                 return `
                     <div class="search-result-item">
                         <div class="book-cover">
-                            <img src="${cover}" alt="${title}" />
+                            <img src="${initialCover}" data-cover-src="${cover}" alt="${title}" loading="lazy" referrerpolicy="no-referrer" />
                         </div>
                         <div class="book-info">
                             <h3 class="book-title">${title}</h3>
@@ -640,6 +641,7 @@
             }).join('');
 
             resultsList.innerHTML = html;
+            applyCoverImageFallbacks();
         }
 
         function escapeHtml(value) {
@@ -745,6 +747,37 @@
             } catch {
                 return String(details);
             }
+        }
+
+        function applyCoverImageFallbacks() {
+            const images = resultsList.querySelectorAll('img[data-cover-src]');
+            images.forEach((img) => {
+                const coverSrc = img.dataset.coverSrc;
+                if (!coverSrc) {
+                    markImageAsFallback(img);
+                    return;
+                }
+
+                const handleError = () => {
+                    markImageAsFallback(img);
+                };
+
+                img.addEventListener('error', handleError, { once: true });
+
+                if (img.complete && img.naturalWidth === 0) {
+                    handleError();
+                }
+            });
+        }
+
+        function markImageAsFallback(img) {
+            if (img.dataset.fallbackApplied === 'true') {
+                return;
+            }
+
+            img.dataset.fallbackApplied = 'true';
+            img.removeAttribute('data-cover-src');
+            img.src = placeholderCover;
         }
 
         showEmptyState();

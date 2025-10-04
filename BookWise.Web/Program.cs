@@ -1,12 +1,13 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using BookWise.Web.Data;
 using BookWise.Web.Models;
+using HtmlAgilityPack;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -20,28 +21,11 @@ builder.Services.AddRazorPages();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpClient();
-builder.Services.AddHttpClient("DeepSeek", client =>
+builder.Services.AddHttpClient("DoubanBooks", client =>
 {
-    client.BaseAddress = new Uri("https://api.deepseek.com/v1/");
-    client.Timeout = TimeSpan.FromSeconds(120);
-}).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-{
-    Proxy = null,
-    UseProxy = false,
-    ConnectTimeout = TimeSpan.FromSeconds(30),
-    PooledConnectionLifetime = TimeSpan.FromMinutes(2)
-});
-
-builder.Services.AddHttpClient("GoogleBooks", client =>
-{
-    client.BaseAddress = new Uri("https://www.googleapis.com/books/v1/");
+    client.BaseAddress = new Uri("https://book.douban.com/");
     client.Timeout = TimeSpan.FromSeconds(10);
-});
-
-builder.Services.AddHttpClient("OpenLibrary", client =>
-{
-    client.BaseAddress = new Uri("https://openlibrary.org/");
-    client.Timeout = TimeSpan.FromSeconds(10);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 (+https://bookwise.local)");
 });
 
 builder.Services.AddDbContext<BookWiseContext>(options =>
@@ -298,50 +282,12 @@ books.MapDelete("/{id:int}", async (int id, BookWiseContext db, ILogger<Program>
 app.MapPost("/api/book-search", async Task<IResult> (
     [FromBody] BookSearchRequest request,
     IHttpClientFactory httpClientFactory,
-    IConfiguration configuration,
     ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
-    static string? ExtractJsonObject(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        var text = value
-            .Replace("<think>", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Replace("</think>", string.Empty, StringComparison.OrdinalIgnoreCase)
-            .Trim();
-
-        if (text.StartsWith("```", StringComparison.Ordinal))
-        {
-            var endFence = text.LastIndexOf("```", StringComparison.Ordinal);
-            if (endFence > 0)
-            {
-                text = text[3..endFence].Trim();
-                if (text.StartsWith("json", StringComparison.OrdinalIgnoreCase))
-                {
-                    text = text[4..].TrimStart();
-                }
-            }
-        }
-
-        var firstBrace = text.IndexOf('{');
-        var lastBrace = text.LastIndexOf('}');
-
-        if (firstBrace < 0 || lastBrace <= firstBrace)
-        {
-            return null;
-        }
-
-        var jsonCandidate = text.Substring(firstBrace, lastBrace - firstBrace + 1).Trim();
-        return string.IsNullOrWhiteSpace(jsonCandidate) ? null : jsonCandidate;
-    }
-
     var operationId = Guid.NewGuid();
     var searchTimer = Stopwatch.StartNew();
-    logger.LogInformation("[{OperationId}] Incoming book search request for query '{Query}'", operationId, request.Query);
+    logger.LogInformation("[{OperationId}] Douban search request for query '{Query}'", operationId, request.Query);
 
     if (string.IsNullOrWhiteSpace(request.Query))
     {
@@ -349,158 +295,41 @@ app.MapPost("/api/book-search", async Task<IResult> (
         return Results.BadRequest(new { message = "Query is required." });
     }
 
-    var apiKey = configuration["DeepSeek:ApiKey"] ?? configuration["DEEPSEEK_API_KEY"];
-    if (string.IsNullOrWhiteSpace(apiKey))
-    {
-        return Results.Problem("DeepSeek API key is not configured.", statusCode: StatusCodes.Status500InternalServerError);
-    }
-
-    var model = configuration["DeepSeek:Model"] ?? "deepseek-reasoner";
-
-    var httpClient = httpClientFactory.CreateClient("DeepSeek");
-    httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-    var requestBody = new
-    {
-        model,
-        temperature = 0.3,
-        max_tokens = 2500,
-        stream = false,
-        response_format = new
-        {
-            type = "json_object"
-        },
-        messages = new object[]
-        {
-            new
-            {
-                role = "system",
-                content = "Respond with pure JSON (no markdown, no code fences). Format exactly as {\"books\":[{\"title\":string,\"author\":string,\"description\":string,\"published\":string|null,\"language\":string|null,\"coverImageUrl\":string|null}]}."
-            },
-            new
-            {
-                role = "user",
-                content = $"Find 3-5 books matching '{request.Query}'. Return JSON only."
-            }
-        }
-    };
-
     try
     {
-        logger.LogDebug("[{OperationId}] Submitting request to DeepSeek", operationId);
-        using var httpContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-        var response = await httpClient.PostAsync("chat/completions", httpContent);
+        var doubanClient = httpClientFactory.CreateClient("DoubanBooks");
+        var books = await DoubanBookSearch.SearchAsync(request.Query, doubanClient, logger, operationId, cancellationToken);
 
-        if (!response.IsSuccessStatusCode)
-        {
-            var details = await response.Content.ReadAsStringAsync();
-            logger.LogError("[{OperationId}] DeepSeek request failed with status {StatusCode}: {Details}", operationId, (int)response.StatusCode, details);
-            return Results.Problem($"DeepSeek request failed: {details}", statusCode: (int)response.StatusCode);
-        }
+        logger.LogInformation("[{OperationId}] Douban search returned {Count} results in {Elapsed} ms",
+            operationId,
+            books.Length,
+            searchTimer.ElapsedMilliseconds);
 
-        using var responseStream = await response.Content.ReadAsStreamAsync();
-        using var document = await JsonDocument.ParseAsync(responseStream);
-        if (!document.RootElement.TryGetProperty("choices", out var choicesElement) ||
-            choicesElement.ValueKind != JsonValueKind.Array || choicesElement.GetArrayLength() == 0)
-        {
-            logger.LogError("[{OperationId}] DeepSeek response missing choices array", operationId);
-            return Results.Problem("DeepSeek response did not include any choices.", statusCode: StatusCodes.Status502BadGateway);
-        }
-
-        var content = choicesElement
-            .EnumerateArray()
-            .Select(choice =>
-            {
-                if (choice.TryGetProperty("message", out var messageElement) &&
-                    messageElement.TryGetProperty("content", out var contentElement))
-                {
-                    if (contentElement.ValueKind == JsonValueKind.String)
-                    {
-                        return contentElement.GetString();
-                    }
-
-                    if (contentElement.ValueKind == JsonValueKind.Array)
-                    {
-                        return string.Join(string.Empty,
-                            contentElement.EnumerateArray()
-                                .Select(part =>
-                                {
-                                    if (part.ValueKind == JsonValueKind.String)
-                                    {
-                                        return part.GetString();
-                                    }
-
-                                    if (part.ValueKind == JsonValueKind.Object && part.TryGetProperty("text", out var textPart))
-                                    {
-                                        return textPart.GetString();
-                                    }
-
-                                    return null;
-                                })
-                                .Where(segment => !string.IsNullOrEmpty(segment)));
-                    }
-                }
-
-                return (string?)null;
-            })
-            .Where(text => !string.IsNullOrWhiteSpace(text))
-            .LastOrDefault();
-
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            logger.LogError("[{OperationId}] DeepSeek response content empty", operationId);
-            return Results.Problem("DeepSeek response was empty.", statusCode: StatusCodes.Status502BadGateway);
-        }
-
-        var booksJson = ExtractJsonObject(content);
-        if (string.IsNullOrWhiteSpace(booksJson))
-        {
-            logger.LogError("[{OperationId}] Failed to extract JSON object from DeepSeek response", operationId);
-            return Results.Problem("DeepSeek response did not contain valid JSON output.", statusCode: StatusCodes.Status502BadGateway);
-        }
-
-        BookSearchResponse? suggestions;
-        try
-        {
-            suggestions = JsonSerializer.Deserialize<BookSearchResponse>(booksJson, JsonOptions.Instance);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogError(ex, "[{OperationId}] DeepSeek returned invalid JSON", operationId);
-            return Results.Problem($"DeepSeek returned invalid JSON: {ex.Message}", statusCode: StatusCodes.Status502BadGateway);
-        }
-
-        if (suggestions?.Books is not { Length: >= 0 })
-        {
-            logger.LogError("[{OperationId}] DeepSeek response missing books collection", operationId);
-            return Results.Problem("DeepSeek response was missing the books collection.", statusCode: StatusCodes.Status502BadGateway);
-        }
-
-        logger.LogInformation("[{OperationId}] DeepSeek returned {Count} book suggestions", operationId, suggestions.Books.Length);
-
-        var enriched = await BookSearchEnrichment.EnrichCoverImagesAsync(suggestions.Books, httpClientFactory, logger, operationId, cancellationToken);
-
-        logger.LogInformation("[{OperationId}] Completed search pipeline in {Elapsed} ms", operationId, searchTimer.ElapsedMilliseconds);
-        return Results.Ok(new BookSearchResponse(enriched));
+        return Results.Ok(new BookSearchResponse(books));
     }
-    catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
     {
-        logger.LogError(ex, "[{OperationId}] Search request timed out", operationId);
-        return Results.Problem("Search request timed out. Please try again.", statusCode: StatusCodes.Status504GatewayTimeout);
-    }
-    catch (TaskCanceledException)
-    {
-        logger.LogWarning("[{OperationId}] Search request was canceled", operationId);
+        logger.LogWarning("[{OperationId}] Douban search was canceled", operationId);
         return Results.Problem("Search request was canceled. Please try again.", statusCode: StatusCodes.Status408RequestTimeout);
+    }
+    catch (TaskCanceledException ex)
+    {
+        logger.LogError(ex, "[{OperationId}] Douban search timed out", operationId);
+        return Results.Problem("Search request timed out. Please try again.", statusCode: StatusCodes.Status504GatewayTimeout);
     }
     catch (HttpRequestException ex)
     {
-        logger.LogError(ex, "[{OperationId}] Network error during search", operationId);
+        logger.LogError(ex, "[{OperationId}] Network error during Douban search", operationId);
         return Results.Problem($"Network error while searching: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (JsonException ex)
+    {
+        logger.LogError(ex, "[{OperationId}] Failed to parse Douban response", operationId);
+        return Results.Problem($"Failed to parse Douban response: {ex.Message}", statusCode: StatusCodes.Status502BadGateway);
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "[{OperationId}] Unexpected error during search", operationId);
+        logger.LogError(ex, "[{OperationId}] Unexpected error during Douban search", operationId);
         return Results.Problem($"An error occurred while searching: {ex.Message}", statusCode: StatusCodes.Status500InternalServerError);
     }
     finally
@@ -586,243 +415,334 @@ static class JsonOptions
     };
 }
 
-static class BookSearchEnrichment
+static class DoubanBookSearch
 {
-    public static async Task<BookSuggestion[]> EnrichCoverImagesAsync(
-        BookSuggestion[] books,
-        IHttpClientFactory httpClientFactory,
+    private const int MaxResults = 5;
+    private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+
+    public static async Task<BookSuggestion[]> SearchAsync(
+        string query,
+        HttpClient client,
         ILogger logger,
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        if (books.Length == 0)
+        var suggestions = await FetchSuggestionsAsync(query, client, logger, operationId, cancellationToken);
+        if (suggestions.Count == 0)
         {
-            return books;
+            return Array.Empty<BookSuggestion>();
         }
 
-        var googleClient = httpClientFactory.CreateClient("GoogleBooks");
-        var openLibraryClient = httpClientFactory.CreateClient("OpenLibrary");
-        var enriched = new BookSuggestion[books.Length];
+        var results = new List<BookSuggestion>(suggestions.Count);
 
-        for (var i = 0; i < books.Length; i++)
+        foreach (var suggestion in suggestions)
         {
-            var book = books[i];
-            if (!string.IsNullOrWhiteSpace(book.CoverImageUrl))
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var book = await FetchBookDetailsAsync(suggestion, client, logger, operationId, cancellationToken);
+            if (book is { } detail)
             {
-                logger.LogDebug("[{OperationId}] Skipping cover lookup for '{Title}' – already has cover", operationId, book.Title);
-                enriched[i] = book;
+                results.Add(detail);
+            }
+        }
+
+        return results.ToArray();
+    }
+
+    private static async Task<List<DoubanSuggestion>> FetchSuggestionsAsync(
+        string query,
+        HttpClient client,
+        ILogger logger,
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        var encodedQuery = Uri.EscapeDataString(query); // Douban expects UTF-8 query
+        var requestUri = $"j/subject_suggest?q={encodedQuery}";
+
+        using var response = await client.GetAsync(requestUri, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("[{OperationId}] Douban suggestion request failed with status {StatusCode}", operationId, (int)response.StatusCode);
+            return new List<DoubanSuggestion>(); // no suggestions available
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            logger.LogWarning("[{OperationId}] Douban suggestion response was not an array", operationId);
+            return new List<DoubanSuggestion>();
+        }
+
+        var suggestions = new List<DoubanSuggestion>(MaxResults);
+
+        foreach (var element in document.RootElement.EnumerateArray())
+        {
+            if (!element.TryGetProperty("url", out var urlElement) || urlElement.ValueKind != JsonValueKind.String)
+            {
                 continue;
             }
 
-            logger.LogDebug("[{OperationId}] Fetching cover for '{Title}' by {Author}", operationId, book.Title, book.Author);
-            var coverUrl = await TryFetchGoogleCoverUrlAsync(googleClient, book, logger, operationId, cancellationToken);
+            var urlText = urlElement.GetString();
+            if (string.IsNullOrWhiteSpace(urlText))
+            {
+                continue;
+            }
 
-            if (string.IsNullOrWhiteSpace(coverUrl))
+            if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url))
             {
-                logger.LogDebug("[{OperationId}] Google Books returned no cover for '{Title}'. Trying Open Library fallback.", operationId, book.Title);
-                coverUrl = await TryFetchOpenLibraryCoverUrlAsync(openLibraryClient, book, logger, operationId, cancellationToken);
+                continue;
             }
-            if (!string.IsNullOrWhiteSpace(coverUrl))
+
+            var title = element.TryGetProperty("title", out var titleElement) && titleElement.ValueKind == JsonValueKind.String
+                ? titleElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            var author = element.TryGetProperty("author_name", out var authorElement) && authorElement.ValueKind == JsonValueKind.String
+                ? authorElement.GetString()
+                : null;
+
+            var year = element.TryGetProperty("year", out var yearElement) && yearElement.ValueKind == JsonValueKind.String
+                ? yearElement.GetString()
+                : null;
+
+            suggestions.Add(new DoubanSuggestion(title, author, year, url));
+
+            if (suggestions.Count >= MaxResults)
             {
-                logger.LogInformation("[{OperationId}] Found cover for '{Title}'", operationId, book.Title);
-                enriched[i] = book with { CoverImageUrl = coverUrl };
-            }
-            else
-            {
-                logger.LogWarning("[{OperationId}] No cover found for '{Title}'", operationId, book.Title);
-                enriched[i] = book;
+                break;
             }
         }
 
-        return enriched;
+        return suggestions;
     }
 
-    private static async Task<string?> TryFetchGoogleCoverUrlAsync(
+    private static async Task<BookSuggestion?> FetchBookDetailsAsync(
+        DoubanSuggestion suggestion,
         HttpClient client,
-        BookSuggestion book,
         ILogger logger,
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        var querySegments = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(book.Title))
-        {
-            querySegments.Add($"intitle:{book.Title}");
-        }
-
-        if (!string.IsNullOrWhiteSpace(book.Author))
-        {
-            querySegments.Add($"inauthor:{book.Author}");
-        }
-
-        if (querySegments.Count == 0)
-        {
-            logger.LogWarning("[{OperationId}] Skipping cover lookup because query segments were empty", operationId);
-            return null;
-        }
-
-        var requestUri = $"volumes?q={Uri.EscapeDataString(string.Join(" ", querySegments))}&maxResults=1&printType=books&fields=items(volumeInfo/imageLinks/thumbnail,imageLinks/smallThumbnail)";
-
         try
         {
-            using var response = await client.GetAsync(requestUri, cancellationToken);
+            using var response = await client.GetAsync(suggestion.DetailUri, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("[{OperationId}] Google Books returned status {StatusCode} for '{Title}'", operationId, (int)response.StatusCode, book.Title);
+                logger.LogWarning("[{OperationId}] Douban detail request for '{Title}' failed with status {StatusCode}", operationId, suggestion.Title, (int)response.StatusCode);
                 return null;
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            using var reader = new StreamReader(stream);
+            var html = await reader.ReadToEndAsync();
 
-            if (!document.RootElement.TryGetProperty("items", out var itemsElement) ||
-                itemsElement.ValueKind != JsonValueKind.Array ||
-                itemsElement.GetArrayLength() == 0)
+            var parsed = ParseBookDetails(html);
+            if (parsed is null)
             {
-                logger.LogDebug("[{OperationId}] Google Books returned no items for '{Title}'", operationId, book.Title);
+                logger.LogWarning("[{OperationId}] Unable to parse Douban book page for '{Title}'", operationId, suggestion.Title);
                 return null;
             }
 
-            var firstItem = itemsElement[0];
-            if (!firstItem.TryGetProperty("volumeInfo", out var volumeInfo) ||
-                volumeInfo.ValueKind != JsonValueKind.Object)
-            {
-                logger.LogDebug("[{OperationId}] Google Books response missing volumeInfo for '{Title}'", operationId, book.Title);
-                return null;
-            }
+            var parsedBook = parsed;
 
-            if (!volumeInfo.TryGetProperty("imageLinks", out var imageLinks) ||
-                imageLinks.ValueKind != JsonValueKind.Object)
-            {
-                logger.LogDebug("[{OperationId}] Google Books response missing imageLinks for '{Title}'", operationId, book.Title);
-                return null;
-            }
+            var title = string.IsNullOrWhiteSpace(parsedBook.Title)
+                ? suggestion.Title
+                : parsedBook.Title;
 
-            static string? ReadImageLink(JsonElement element)
-            {
-                if (element.ValueKind != JsonValueKind.Object)
-                {
-                    return null;
-                }
+            var author = string.IsNullOrWhiteSpace(parsedBook.Author)
+                ? (suggestion.Author ?? "未知作者")
+                : parsedBook.Author;
 
-                if (element.TryGetProperty("thumbnail", out var thumb) && thumb.ValueKind == JsonValueKind.String)
-                {
-                    return thumb.GetString();
-                }
+            var description = string.IsNullOrWhiteSpace(parsedBook.Description)
+                ? null
+                : parsedBook.Description;
 
-                if (element.TryGetProperty("smallThumbnail", out var small) && small.ValueKind == JsonValueKind.String)
-                {
-                    return small.GetString();
-                }
+            var published = string.IsNullOrWhiteSpace(parsedBook.Published)
+                ? suggestion.Year
+                : parsedBook.Published;
 
-                return null;
-            }
+            var language = string.IsNullOrWhiteSpace(parsedBook.Language)
+                ? null
+                : parsedBook.Language;
 
-            var link = ReadImageLink(imageLinks);
-            return NormalizeCoverUrl(link);
+            var cover = string.IsNullOrWhiteSpace(parsedBook.CoverImageUrl)
+                ? null
+                : parsedBook.CoverImageUrl;
+
+            return new BookSuggestion(
+                title,
+                string.IsNullOrWhiteSpace(author) ? "未知作者" : author,
+                description,
+                string.IsNullOrWhiteSpace(published) ? null : published,
+                language,
+                cover);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
-            logger.LogWarning("[{OperationId}] Cover lookup cancelled for '{Title}'", operationId, book.Title);
-            return null;
+            throw;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "[{OperationId}] Failed to fetch cover for '{Title}'", operationId, book.Title);
+            logger.LogError(ex, "[{OperationId}] Failed to fetch Douban details for '{Title}'", operationId, suggestion.Title);
             return null;
         }
     }
 
-    private static async Task<string?> TryFetchOpenLibraryCoverUrlAsync(
-        HttpClient client,
-        BookSuggestion book,
-        ILogger logger,
-        Guid operationId,
-        CancellationToken cancellationToken)
+    private static BookSuggestion? ParseBookDetails(string html)
     {
-        var queryParts = new List<string>();
+        var document = new HtmlDocument();
+        document.LoadHtml(html);
 
-        if (!string.IsNullOrWhiteSpace(book.Title))
-        {
-            queryParts.Add($"title={Uri.EscapeDataString(book.Title)}");
-        }
+        var title = FirstNonEmpty(
+            GetMetaContent(document, "og:title"),
+            GetJsonLdValue(document, "name"));
 
-        if (!string.IsNullOrWhiteSpace(book.Author))
+        if (string.IsNullOrWhiteSpace(title))
         {
-            queryParts.Add($"author={Uri.EscapeDataString(book.Author)}");
-        }
-
-        if (queryParts.Count == 0)
-        {
-            logger.LogWarning("[{OperationId}] Skipping Open Library lookup because both title and author were empty", operationId);
             return null;
         }
 
-        queryParts.Add("limit=1");
-        queryParts.Add("fields=docs.cover_i,docs.isbn");
+        var description = NormalizeWhitespace(FirstNonEmpty(
+            GetMetaContent(document, "og:description"),
+            GetInfoValue(document, "内容简介")));
 
-        var requestUri = $"search.json?{string.Join('&', queryParts)}";
+        var author = JoinNonEmpty(GetMetaContents(document, "book:author"));
+        if (string.IsNullOrWhiteSpace(author))
+        {
+            author = GetInfoValue(document, "作者");
+        }
+
+        var published = GetInfoValue(document, "出版年");
+        var language = GetInfoValue(document, "语言");
+        var cover = UpgradeDoubanImageUrl(GetMetaContent(document, "og:image"));
+
+        return new BookSuggestion(
+            HtmlEntity.DeEntitize(title),
+            string.IsNullOrWhiteSpace(author) ? "未知作者" : HtmlEntity.DeEntitize(author),
+            string.IsNullOrWhiteSpace(description) ? null : HtmlEntity.DeEntitize(description),
+            string.IsNullOrWhiteSpace(published) ? null : HtmlEntity.DeEntitize(published),
+            string.IsNullOrWhiteSpace(language) ? null : HtmlEntity.DeEntitize(language),
+            string.IsNullOrWhiteSpace(cover) ? null : NormalizeCoverUrl(cover));
+    }
+
+    private static string? GetMetaContent(HtmlDocument document, string property)
+    {
+        var node = document.DocumentNode.SelectSingleNode($"//meta[@property='{property}']");
+        var value = node?.GetAttributeValue("content", null);
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string[] GetMetaContents(HtmlDocument document, string property)
+    {
+        var nodes = document.DocumentNode.SelectNodes($"//meta[@property='{property}']");
+        if (nodes is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        return nodes
+            .Select(node => node.GetAttributeValue("content", null))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string? GetJsonLdValue(HtmlDocument document, string property)
+    {
+        var scriptNode = document.DocumentNode.SelectSingleNode("//script[@type='application/ld+json']");
+        if (scriptNode is null)
+        {
+            return null;
+        }
 
         try
         {
-            using var response = await client.GetAsync(requestUri, cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            using var jsonDocument = JsonDocument.Parse(scriptNode.InnerText);
+            if (jsonDocument.RootElement.TryGetProperty(property, out var valueElement) && valueElement.ValueKind == JsonValueKind.String)
             {
-                logger.LogDebug("[{OperationId}] Open Library returned status {StatusCode} for '{Title}'", operationId, (int)response.StatusCode, book.Title);
-                return null;
+                return valueElement.GetString();
             }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-
-            if (!document.RootElement.TryGetProperty("docs", out var docs) ||
-                docs.ValueKind != JsonValueKind.Array ||
-                docs.GetArrayLength() == 0)
-            {
-                logger.LogDebug("[{OperationId}] Open Library returned no docs for '{Title}'", operationId, book.Title);
-                return null;
-            }
-
-            var firstDoc = docs[0];
-
-            if (firstDoc.TryGetProperty("cover_i", out var coverIdElement) &&
-                coverIdElement.ValueKind == JsonValueKind.Number &&
-                coverIdElement.TryGetInt32(out var coverId) &&
-                coverId > 0)
-            {
-                return NormalizeCoverUrl($"https://covers.openlibrary.org/b/id/{coverId}-L.jpg");
-            }
-
-            if (firstDoc.TryGetProperty("isbn", out var isbnElement) &&
-                isbnElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var isbnValue in isbnElement.EnumerateArray())
-                {
-                    if (isbnValue.ValueKind == JsonValueKind.String)
-                    {
-                        var isbn = isbnValue.GetString();
-                        if (!string.IsNullOrWhiteSpace(isbn))
-                        {
-                            return NormalizeCoverUrl($"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg");
-                        }
-                    }
-                }
-            }
-
-            logger.LogDebug("[{OperationId}] Open Library doc missing cover information for '{Title}'", operationId, book.Title);
-            return null;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (JsonException)
         {
-            logger.LogWarning("[{OperationId}] Open Library lookup cancelled for '{Title}'", operationId, book.Title);
-            return null;
+            // Fall back silently; some pages embed invalid JSON
         }
-        catch (Exception ex)
+
+        return null;
+    }
+
+    private static string? GetInfoValue(HtmlDocument document, string label)
+    {
+        var nodes = document.DocumentNode.SelectNodes("//div[@id='info']//span[@class='pl']");
+        if (nodes is null)
         {
-            logger.LogError(ex, "[{OperationId}] Failed to fetch Open Library cover for '{Title}'", operationId, book.Title);
             return null;
         }
+
+        foreach (var span in nodes)
+        {
+            var text = HtmlEntity.DeEntitize(span.InnerText).Trim();
+            text = text.TrimEnd(':', '：').Trim();
+
+            if (!string.Equals(text, label, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var parent = span.ParentNode;
+            if (parent is null)
+            {
+                continue;
+            }
+
+            var rawValue = HtmlEntity.DeEntitize(parent.InnerText);
+            rawValue = rawValue.Replace(span.InnerText, string.Empty, StringComparison.Ordinal);
+            var cleaned = NormalizeWhitespace(rawValue);
+            cleaned = cleaned.Trim(':', '：');
+
+            return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;
+        }
+
+        return null;
+    }
+
+    private static string JoinNonEmpty(IEnumerable<string> values)
+    {
+        return string.Join(", ", values.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()));
+    }
+
+    private static string NormalizeWhitespace(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return WhitespaceRegex.Replace(value, " ").Trim();
+    }
+
+    private static string? UpgradeDoubanImageUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return url;
+        }
+
+        var upgraded = url;
+        if (upgraded.Contains("/s/", StringComparison.Ordinal))
+        {
+            upgraded = upgraded.Replace("/s/", "/l/", StringComparison.Ordinal);
+        }
+
+        if (upgraded.Contains("/small/", StringComparison.Ordinal))
+        {
+            upgraded = upgraded.Replace("/small/", "/large/", StringComparison.Ordinal);
+        }
+
+        return upgraded;
     }
 
     private static string? NormalizeCoverUrl(string? url)
@@ -840,4 +760,19 @@ static class BookSearchEnrichment
 
         return trimmed.Replace("&edge=curl", string.Empty, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string? FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private readonly record struct DoubanSuggestion(string Title, string? Author, string? Year, Uri DetailUri);
 }
