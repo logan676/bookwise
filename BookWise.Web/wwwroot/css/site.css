@@ -1669,6 +1669,12 @@ a:hover {
   line-height: 1.4;
 }
 
+.search-result-item .book-quote {
+  font-style: italic;
+  color: var(--gray-600);
+  margin-top: 0.5rem;
+}
+
 .search-result-item .add-book-btn {
   display: inline-flex;
   align-items: center;

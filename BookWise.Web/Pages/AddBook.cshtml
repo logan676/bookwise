@@ -315,15 +315,28 @@
                 author = '',
                 description = '',
                 cover = '',
-                category = ''
+                category = '',
+                quote = '',
+                isbn = '',
+                rating = ''
             } = button.dataset;
+
+            const toNullable = (value) => {
+                const trimmed = (value ?? '').trim();
+                return trimmed.length > 0 ? trimmed : null;
+            };
+
+            const parsedRating = Number.parseFloat(rating);
 
             return {
                 title: title.trim(),
                 author: author.trim(),
-                description: description.trim(),
-                coverImageUrl: cover.trim(),
-                category: category.trim()
+                description: toNullable(description),
+                coverImageUrl: toNullable(cover),
+                category: toNullable(category),
+                quote: toNullable(quote),
+                isbn: toNullable(isbn),
+                rating: Number.isFinite(parsedRating) ? parsedRating : null
             };
         }
 
@@ -511,19 +524,42 @@
                 .toLowerCase();
             const title = (book.title ?? '').trim();
             const author = (book.author ?? '').trim();
-            const rating = typeof extras.rating === 'number'
-                ? Number(extras.rating.toFixed(1))
+            const sanitize = (value) => {
+                if (typeof value !== 'string') {
+                    return null;
+                }
+
+                const trimmed = value.trim();
+                return trimmed.length > 0 ? trimmed : null;
+            };
+
+            const resolvedRating = (() => {
+                if (typeof extras.rating === 'number' && Number.isFinite(extras.rating)) {
+                    return extras.rating;
+                }
+
+                if (typeof book.rating === 'number' && Number.isFinite(book.rating)) {
+                    return book.rating;
+                }
+
+                return null;
+            })();
+
+            const normalizedRating = resolvedRating !== null
+                ? Math.min(5, Math.max(0, Math.round(resolvedRating * 10) / 10))
                 : null;
 
             const payload = {
                 title,
                 author,
-                description: book.description ? book.description.trim() : null,
-                coverImageUrl: book.coverImageUrl ? book.coverImageUrl.trim() : null,
-                category: book.category ? book.category.trim() : null,
+                description: sanitize(book.description),
+                quote: sanitize(book.quote),
+                coverImageUrl: sanitize(book.coverImageUrl),
+                category: sanitize(book.category),
+                isbn: sanitize(book.isbn),
                 status: normalizedStatus,
                 isFavorite: false,
-                rating
+                rating: normalizedRating
             };
 
             if (extras.remark) {
@@ -736,12 +772,28 @@
                     metaParts.push(`Language: ${escapeHtml(book.language)}`);
                 }
 
+                if (typeof book.rating === 'number' && Number.isFinite(book.rating)) {
+                    metaParts.push(`Rating: ${escapeHtml(book.rating.toFixed(1))}/5`);
+                }
+
+                if (book.category) {
+                    metaParts.push(`Category: ${escapeHtml(book.category)}`);
+                }
+
+                if (book.isbn) {
+                    metaParts.push(`ISBN: ${escapeHtml(book.isbn)}`);
+                }
+
                 const metadata = metaParts.length > 0
                     ? `<p class="book-details">${metaParts.join(' | ')}</p>`
                     : '';
 
                 const description = book.description
                     ? `<p class="book-details">${escapeHtml(book.description)}</p>`
+                    : '';
+
+                const quote = book.quote
+                    ? `<p class="book-details book-quote">“${escapeHtml(book.quote)}”</p>`
                     : '';
 
                 const cover = book.coverImageUrl
@@ -752,6 +804,11 @@
                 const initialCover = cover || placeholderCover;
                 const descriptionData = escapeAttribute(book.description ?? '');
                 const categoryData = escapeAttribute(book.category ?? '');
+                const quoteData = escapeAttribute(book.quote ?? '');
+                const isbnData = escapeAttribute(book.isbn ?? '');
+                const ratingData = (typeof book.rating === 'number' && Number.isFinite(book.rating))
+                    ? escapeAttribute(book.rating.toFixed(1))
+                    : '';
 
                 return `
                     <div class="search-result-item">
@@ -763,13 +820,17 @@
                             <p class="book-author">by ${author}</p>
                             ${metadata}
                             ${description}
+                            ${quote}
                         </div>
                         <button class="add-book-btn"
                             data-title="${escapeAttribute(rawTitle)}"
                             data-author="${escapeAttribute(rawAuthor)}"
                             data-description="${descriptionData}"
                             data-cover="${coverData}"
-                            data-category="${categoryData}">
+                            data-category="${categoryData}"
+                            data-quote="${quoteData}"
+                            data-isbn="${isbnData}"
+                            data-rating="${ratingData}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>

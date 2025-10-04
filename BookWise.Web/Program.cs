@@ -585,6 +585,19 @@ static class DoubanBookSearch
 {
     private const int MaxResults = 5;
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+    private static readonly (string Category, string[] Keywords)[] CategoryMappings = new[]
+    {
+        ("Science Fiction", new[] { "science fiction", "sci-fi", "sci fi", "科幻", "太空" }),
+        ("Fantasy", new[] { "fantasy", "奇幻", "魔幻" }),
+        ("History", new[] { "history", "histor", "历史", "文明" }),
+        ("Biography", new[] { "biography", "memoir", "传记" }),
+        ("Self-Improvement", new[] { "self-help", "self help", "习惯", "成长", "motivation", "心理" }),
+        ("Technology", new[] { "programming", "software", "编码", "开发", "算法", "coding", "工程" }),
+        ("Business", new[] { "business", "管理", "经济", "finance", "投资" }),
+        ("Philosophy", new[] { "philosophy", "哲学" }),
+        ("Poetry", new[] { "poetry", "诗" }),
+        ("Literature & Fiction", new[] { "fiction", "novel", "小说", "文学" })
+    };
 
     public static async Task<BookSuggestion[]> SearchAsync(
         string query,
@@ -763,6 +776,20 @@ static class DoubanBookSearch
                 ? null
                 : parsedBook.Description;
 
+            var quote = string.IsNullOrWhiteSpace(parsedBook.Quote)
+                ? null
+                : parsedBook.Quote;
+
+            var category = string.IsNullOrWhiteSpace(parsedBook.Category)
+                ? null
+                : parsedBook.Category;
+
+            var isbn = string.IsNullOrWhiteSpace(parsedBook.Isbn)
+                ? null
+                : parsedBook.Isbn;
+
+            var rating = parsedBook.Rating;
+
             var published = string.IsNullOrWhiteSpace(parsedBook.Published)
                 ? suggestion.Year
                 : parsedBook.Published;
@@ -779,6 +806,10 @@ static class DoubanBookSearch
                 title,
                 string.IsNullOrWhiteSpace(author) ? "未知作者" : author,
                 description,
+                quote,
+                category,
+                isbn,
+                rating,
                 string.IsNullOrWhiteSpace(published) ? null : published,
                 language,
                 cover);
@@ -821,14 +852,122 @@ static class DoubanBookSearch
         var published = GetInfoValue(document, "出版年");
         var language = GetInfoValue(document, "语言");
         var cover = UpgradeDoubanImageUrl(GetMetaContent(document, "og:image"));
+        var isbn = CreateBookRequest.NormalizeIsbn(GetInfoValue(document, "ISBN"));
+        var quote = ExtractQuote(document);
+        var category = InferCategory(document, title, description);
+        var rating = ParseRating(document);
 
         return new BookSuggestion(
             HtmlEntity.DeEntitize(title),
             string.IsNullOrWhiteSpace(author) ? "未知作者" : HtmlEntity.DeEntitize(author),
             string.IsNullOrWhiteSpace(description) ? null : HtmlEntity.DeEntitize(description),
+            string.IsNullOrWhiteSpace(quote) ? null : HtmlEntity.DeEntitize(quote),
+            string.IsNullOrWhiteSpace(category) ? null : HtmlEntity.DeEntitize(category),
+            string.IsNullOrWhiteSpace(isbn) ? null : isbn,
+            rating,
             string.IsNullOrWhiteSpace(published) ? null : HtmlEntity.DeEntitize(published),
             string.IsNullOrWhiteSpace(language) ? null : HtmlEntity.DeEntitize(language),
             string.IsNullOrWhiteSpace(cover) ? null : NormalizeCoverUrl(cover));
+    }
+
+    private static decimal? ParseRating(HtmlDocument document)
+    {
+        var ratingNode = document.DocumentNode.SelectSingleNode("//strong[contains(@class,'rating_num')]");
+        if (ratingNode is null)
+        {
+            return null;
+        }
+
+        var text = NormalizeWhitespace(HtmlEntity.DeEntitize(ratingNode.InnerText));
+        if (!decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var raw) || raw <= 0)
+        {
+            return null;
+        }
+
+        var scaled = raw / 2m;
+        if (scaled < 0)
+        {
+            scaled = 0;
+        }
+        else if (scaled > 5)
+        {
+            scaled = 5;
+        }
+
+        return Math.Round(scaled, 1, MidpointRounding.AwayFromZero);
+    }
+
+    private static string? ExtractQuote(HtmlDocument document)
+    {
+        var linkReport = document.DocumentNode.SelectSingleNode("//div[@id='link-report']");
+        var paragraphs = linkReport?.SelectNodes(".//p");
+        if (paragraphs is null)
+        {
+            return null;
+        }
+
+        string? fallback = null;
+        foreach (var paragraph in paragraphs)
+        {
+            var raw = HtmlEntity.DeEntitize(paragraph.InnerText);
+            var text = NormalizeWhitespace(raw);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                continue;
+            }
+
+            fallback ??= text;
+
+            if (text.Contains('“') || text.Contains('”') || text.Contains('"') || text.Contains('「') || text.Contains('」') || text.Contains("——"))
+            {
+                return text;
+            }
+        }
+
+        return fallback;
+    }
+
+    private static string? InferCategory(HtmlDocument document, string title, string? description)
+    {
+        var tagNode = document.DocumentNode.SelectSingleNode("//div[@id='db-tags-section']//a");
+        var tagText = NormalizeWhitespace(HtmlEntity.DeEntitize(tagNode?.InnerText ?? string.Empty));
+        if (!string.IsNullOrWhiteSpace(tagText))
+        {
+            return tagText;
+        }
+
+        var series = GetInfoValue(document, "丛书");
+        if (!string.IsNullOrWhiteSpace(series))
+        {
+            return series;
+        }
+
+        var normalized = (title + " " + (description ?? string.Empty)).ToLowerInvariant();
+
+        foreach (var (category, keywords) in CategoryMappings)
+        {
+            foreach (var keyword in keywords)
+            {
+                if (normalized.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    return category;
+                }
+            }
+        }
+
+        var publisher = GetInfoValue(document, "出版社");
+        if (!string.IsNullOrWhiteSpace(publisher))
+        {
+            return publisher;
+        }
+
+        var producer = GetInfoValue(document, "出品方");
+        if (!string.IsNullOrWhiteSpace(producer))
+        {
+            return producer;
+        }
+
+        return null;
     }
 
     private static IEnumerable<string> BuildTitleQueryVariants(string query)
