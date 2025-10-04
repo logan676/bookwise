@@ -16,6 +16,9 @@ public class Author
     [MaxLength(200)]
     public string NormalizedName { get; set; } = string.Empty;
 
+    [MaxLength(500)]
+    public string? AvatarUrl { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset? UpdatedAt { get; set; }

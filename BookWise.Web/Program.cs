@@ -269,8 +269,9 @@ books.MapPost("", async (
             .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
     }
 
-    var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, cancellationToken);
+    var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, normalizedRequest.AuthorAvatarUrl, cancellationToken);
     var entity = normalizedRequest.ToEntity(author);
+    CreateBookRequest.SyncQuoteSnapshot(entity);
     await db.Books.AddAsync(entity, cancellationToken);
     await db.SaveChangesAsync(cancellationToken);
 
@@ -324,10 +325,10 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
         return Results.NotFound();
     }
 
-    var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, cancellationToken);
+    var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, normalizedRequest.AuthorAvatarUrl, cancellationToken);
 
     normalizedRequest.Apply(book, author);
-    SyncQuoteSnapshot(book);
+    CreateBookRequest.SyncQuoteSnapshot(book);
     await db.SaveChangesAsync(cancellationToken);
 
     timer.Stop();
@@ -339,37 +340,6 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
         book.Status,
         timer.ElapsedMilliseconds);
     return Results.Ok(book);
-    void SyncQuoteSnapshot(Book bookEntity)
-    {
-        var snapshot = CreateBookRequest.CreateQuoteSnapshot(
-            bookEntity.Quote,
-            bookEntity.Title,
-            bookEntity.Author,
-            bookEntity.CoverImageUrl);
-
-        var existing = bookEntity.Quotes.FirstOrDefault();
-
-        if (snapshot is null)
-        {
-            if (existing is not null)
-            {
-                bookEntity.Quotes.Remove(existing);
-            }
-
-            return;
-        }
-
-        if (existing is null)
-        {
-            bookEntity.Quotes.Add(snapshot);
-            return;
-        }
-
-        existing.Text = snapshot.Text;
-        existing.Author = snapshot.Author;
-        existing.Source = snapshot.Source;
-        existing.BackgroundImageUrl = snapshot.BackgroundImageUrl;
-    }
 });
 
 books.MapDelete("/{id:int}", async (int id, BookWiseContext db, ILogger<Program> logger) =>
@@ -474,6 +444,7 @@ record BookQuery(string? Search, bool OnlyFavorites = false, string? Category = 
 record CreateBookRequest(
     [property: Required, MaxLength(200)] string Title,
     [property: Required, MaxLength(200)] string Author,
+    [property: MaxLength(500), Url] string? AuthorAvatarUrl,
     [property: MaxLength(2000)] string? Description,
     [property: MaxLength(500)] string? Quote,
     [property: MaxLength(500), Url] string? CoverImageUrl,
@@ -494,6 +465,7 @@ record CreateBookRequest(
         {
             Title = TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty,
             Author = TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty,
+            AuthorAvatarUrl = TrimToLength(AuthorAvatarUrl, 500),
             Description = TrimToLength(Description, 2000),
             Quote = TrimToLength(Quote, 500),
             CoverImageUrl = TrimToLength(CoverImageUrl, 500),
@@ -514,6 +486,11 @@ record CreateBookRequest(
         var normalizedAuthor = TrimToLength(author.Name, 200, allowEmpty: true) ?? string.Empty;
         author.Name = normalizedAuthor;
         author.NormalizedName = AuthorResolver.BuildNormalizedKey(normalizedAuthor);
+        var normalizedAvatar = TrimToLength(AuthorAvatarUrl, 500);
+        if (!string.IsNullOrWhiteSpace(normalizedAvatar))
+        {
+            author.AvatarUrl = normalizedAvatar;
+        }
 
         var normalizedDescription = TrimToLength(Description, 2000);
         var normalizedQuote = TrimToLength(Quote, 500);
@@ -768,6 +745,40 @@ record CreateBookRequest(
         return normalized.Length == 0 ? null : normalized;
     }
 
+    internal static void SyncQuoteSnapshot(Book book)
+    {
+        ArgumentNullException.ThrowIfNull(book);
+
+        var snapshot = CreateQuoteSnapshot(
+            book.Quote,
+            book.Title,
+            book.Author,
+            book.CoverImageUrl);
+
+        var existing = book.Quotes.FirstOrDefault();
+
+        if (snapshot is null)
+        {
+            if (existing is not null)
+            {
+                book.Quotes.Remove(existing);
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            book.Quotes.Add(snapshot);
+            return;
+        }
+
+        existing.Text = snapshot.Text;
+        existing.Author = snapshot.Author;
+        existing.Source = snapshot.Source;
+        existing.BackgroundImageUrl = snapshot.BackgroundImageUrl;
+    }
+
     internal static BookQuote? CreateQuoteSnapshot(string? quote, string title, string author, string? coverImageUrl)
     {
         if (string.IsNullOrWhiteSpace(quote))
@@ -855,6 +866,7 @@ record CreateBookRemark(
 record UpdateBookRequest(
     [property: Required, MaxLength(200)] string Title,
     [property: Required, MaxLength(200)] string Author,
+    [property: MaxLength(500), Url] string? AuthorAvatarUrl,
     [property: MaxLength(2000)] string? Description,
     [property: MaxLength(500)] string? Quote,
     [property: MaxLength(500), Url] string? CoverImageUrl,
@@ -870,6 +882,7 @@ record UpdateBookRequest(
     {
         Title = CreateBookRequest.TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty,
         Author = CreateBookRequest.TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty,
+        AuthorAvatarUrl = CreateBookRequest.TrimToLength(AuthorAvatarUrl, 500),
         Description = CreateBookRequest.TrimToLength(Description, 2000),
         Quote = CreateBookRequest.TrimToLength(Quote, 500),
         CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500),
@@ -888,6 +901,11 @@ record UpdateBookRequest(
         var normalizedAuthor = CreateBookRequest.TrimToLength(author.Name, 200, allowEmpty: true) ?? string.Empty;
         author.Name = normalizedAuthor;
         author.NormalizedName = AuthorResolver.BuildNormalizedKey(normalizedAuthor);
+        var normalizedAvatar = CreateBookRequest.TrimToLength(AuthorAvatarUrl, 500);
+        if (!string.IsNullOrWhiteSpace(normalizedAvatar))
+        {
+            author.AvatarUrl = normalizedAvatar;
+        }
 
         book.Title = CreateBookRequest.TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty;
         book.Author = normalizedAuthor;

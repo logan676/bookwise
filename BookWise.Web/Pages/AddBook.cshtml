@@ -108,6 +108,16 @@
             <p class="status-modal-helper">Capture your personal score between 0 and 5.</p>
         </div>
         <div class="status-modal-form-group">
+            <label for="author-avatar" class="status-modal-label">Author avatar URL (optional)</label>
+            <input type="url"
+                   id="author-avatar"
+                   class="status-modal-input"
+                   name="author-avatar"
+                   maxlength="500"
+                   placeholder="https://example.com/avatar.jpg" />
+            <p class="status-modal-helper">We'll store this image with the author in your library.</p>
+        </div>
+        <div class="status-modal-form-group">
             <label for="remark-content" class="status-modal-label">Personal remark (optional)</label>
             <input type="text"
                    id="remark-title"
@@ -156,6 +166,7 @@
         const ratingInput = document.getElementById('book-rating');
         const remarkTitleInput = document.getElementById('remark-title');
         const remarkContentInput = document.getElementById('remark-content');
+        const authorAvatarInput = document.getElementById('author-avatar');
 
         const readingStatusOptions = [
             {
@@ -202,6 +213,15 @@
             }
 
             return trimmed;
+        };
+
+        const buildDefaultAuthorAvatar = (name) => {
+            if (typeof name !== 'string' || !name.trim()) {
+                return 'https://i.pravatar.cc/160?img=1';
+            }
+
+            const identifier = encodeURIComponent(name.trim().toLowerCase());
+            return `https://i.pravatar.cc/160?u=${identifier}`;
         };
 
         initializeStatusOptions();
@@ -368,6 +388,10 @@
                 statusModalBook.textContent = `${book.title} · ${book.author}`;
             }
 
+            if (authorAvatarInput) {
+                authorAvatarInput.value = buildDefaultAuthorAvatar(book.author);
+            }
+
             const radios = statusOptionsContainer?.querySelectorAll('input[name="reading-status"]');
             radios?.forEach((input, index) => {
                 input.checked = index === 0;
@@ -443,10 +467,12 @@
             }
 
             const remarkPayload = buildRemarkPayload();
+            const authorAvatarUrl = sanitizeOptionalText(authorAvatarInput?.value, 500);
 
             const payload = buildBookPayload(selectedBook, selectedStatus, {
                 rating: ratingValue,
-                remark: remarkPayload
+                remark: remarkPayload,
+                avatarUrl: authorAvatarUrl
             });
 
             if (!payload.title || !payload.author) {
@@ -540,6 +566,7 @@
 
             const personalRating = normalizeRatingValue(extras.rating);
             const publicRating = normalizeRatingValue(book.publicRating);
+            const avatarUrl = sanitizeOptionalText(extras.avatarUrl, 500);
 
             const payload = {
                 title,
@@ -554,6 +581,10 @@
                 personalRating,
                 publicRating
             };
+
+            if (avatarUrl) {
+                payload.authorAvatarUrl = avatarUrl;
+            }
 
             if (extras.remark) {
                 payload.remarks = [extras.remark];
@@ -614,6 +645,10 @@
 
             if (remarkContentInput) {
                 remarkContentInput.value = '';
+            }
+
+            if (authorAvatarInput) {
+                authorAvatarInput.value = '';
             }
         }
 

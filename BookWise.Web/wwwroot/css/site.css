@@ -9,6 +9,8 @@
   --gray-400: #94a3b8;
   --surface: #ffffff;
   --bg-soft: #f5f7fb;
+  --layout-max-width: 1440px;
+  --layout-wide-max-width: 1600px;
 }
 
 :root[data-theme="forest"] {
@@ -532,13 +534,13 @@ a:hover {
 
 .main-content {
   flex: 1;
-  width: min(1200px, 98%);
+  width: min(var(--layout-max-width), 98%);
   margin: 0 auto;
   padding: 3rem 0 4rem;
 }
 
 .main-content--wide {
-  width: min(1400px, 92%);
+  width: min(var(--layout-wide-max-width), 92%);
 }
 
 .search-area {
@@ -963,7 +965,7 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  width: min(1200px, 94%);
+  width: min(var(--layout-max-width), 94%);
   margin: 0 auto;
 }
 
@@ -1002,7 +1004,7 @@ a:hover {
 }
 
 .book-sections {
-  width: min(1200px, 94%);
+  width: min(var(--layout-max-width), 94%);
   margin: 0 auto;
   padding: 0 0 4rem;
 }
@@ -1513,7 +1515,7 @@ a:hover {
 /* Search Page Styles (New Add Book Design) */
 .search-page-container {
   min-height: calc(100vh - 120px);
-  width: min(1200px, 94%);
+  width: min(var(--layout-max-width), 94%);
   margin: 0 auto;
   padding: 2rem 0;
 }
@@ -1531,7 +1533,7 @@ a:hover {
 .search-input-wrapper {
   position: relative;
   width: 100%;
-  max-width: 1200px;
+  max-width: var(--layout-max-width);
   display: flex;
   align-items: center;
   background: var(--surface);
@@ -1671,7 +1673,7 @@ a:hover {
   justify-content: center;
   align-items: center;
   min-height: 60vh;
-  max-width: 1200px;
+  max-width: var(--layout-max-width);
   margin: 0 auto;
   width: 100%;
 }
@@ -1683,7 +1685,7 @@ a:hover {
   padding: 4rem 3rem;
   border: 1px solid rgba(148, 163, 184, 0.2);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-  max-width: 1200px;
+  max-width: var(--layout-max-width);
   width: 100%;
 }
 
@@ -2413,7 +2415,7 @@ a:hover {
 
 /* Explore Page Styles */
 .explore-page {
-  max-width: 1200px;
+  max-width: var(--layout-max-width);
   margin: 0 auto;
   padding: 2rem 1.5rem;
 }
@@ -3472,10 +3474,11 @@ a:hover {
 .explore-page {
   display: flex;
   gap: 3.5rem;
-  max-width: 1180px;
+  max-width: var(--layout-max-width);
+  width: 100%;
   margin: 0 auto;
-  padding: 3rem 3rem 4rem;
-  justify-content: center;
+  padding: 3rem 1.5rem 4rem;
+  justify-content: flex-start;
 }
 
 .explore-shell {
@@ -3646,11 +3649,11 @@ a:hover {
 }
 
 .author-content {
-  flex: 0 1 760px;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: 3rem;
-  width: min(760px, 100%);
+  width: 100%;
   min-width: 0;
 }
 
@@ -3751,8 +3754,14 @@ a:hover {
   box-shadow: 0 28px 45px rgba(15, 23, 42, 0.12);
 }
 
+.author-book-cover {
+  align-self: center;
+  display: flex;
+  justify-content: center;
+}
+
 .author-book-cover img {
-  width: 100%;
+  width: min(160px, 100%);
   aspect-ratio: 3 / 4;
   border-radius: 16px;
   object-fit: cover;
@@ -3981,14 +3990,14 @@ a:hover {
 @media (max-width: 1200px) {
   .explore-page {
     gap: 2.5rem;
-    padding: 2.5rem 2.25rem 3.25rem;
+    padding: 2.5rem 1.5rem 3.25rem;
   }
 }
 
 @media (max-width: 1024px) {
   .explore-page {
     flex-direction: column;
-    padding: 2.5rem 2rem 3rem;
+    padding: 2.5rem 1.5rem 3rem;
   }
 
   .authors-panel {
@@ -4038,7 +4047,7 @@ a:hover {
 
 @media (max-width: 768px) {
   .explore-page {
-    padding: 2rem 1.5rem 2.75rem;
+    padding: 2rem 1.25rem 2.75rem;
   }
 
   .author-display-name {
@@ -4125,7 +4134,7 @@ a:hover {
 
 /* Statistics Page Styles */
 .statistics-page {
-  max-width: 1200px;
+  max-width: var(--layout-max-width);
   margin: 0 auto;
   padding: 2rem 1.5rem;
 }
@@ -5952,7 +5961,7 @@ a:hover {
 }
 
 .book-detail-shell {
-  width: min(1360px, 94%);
+  width: min(var(--layout-wide-max-width), 94%);
 }
 
 @media (max-width: 1024px) {

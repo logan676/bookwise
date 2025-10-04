@@ -25,6 +25,9 @@ namespace BookWise.Web.Pages
         public string Author { get; set; } = string.Empty;
 
         [BindProperty]
+        public string? AuthorAvatarUrl { get; set; }
+
+        [BindProperty]
         public string? ISBN { get; set; }
 
         [BindProperty]
@@ -71,6 +74,7 @@ namespace BookWise.Web.Pages
             var request = new CreateBookRequest(
                 Title,
                 Author,
+                AuthorAvatarUrl,
                 Description,
                 Quote,
                 CoverImageUrl,
@@ -83,8 +87,9 @@ namespace BookWise.Web.Pages
                 Remarks: null);
 
             var normalized = request.WithNormalizedData();
-            var authorEntity = await AuthorResolver.GetOrCreateAsync(_context, normalized.Author, cancellationToken);
+            var authorEntity = await AuthorResolver.GetOrCreateAsync(_context, normalized.Author, normalized.AuthorAvatarUrl, cancellationToken);
             var book = normalized.ToEntity(authorEntity);
+            CreateBookRequest.SyncQuoteSnapshot(book);
 
             _context.Books.Add(book);
             await _context.SaveChangesAsync(cancellationToken);
