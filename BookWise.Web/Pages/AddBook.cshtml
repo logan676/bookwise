@@ -90,7 +90,7 @@
         </button>
         <header class="status-modal-header">
             <p class="status-modal-eyebrow" id="status-modal-description">Choose how you want to track this title.</p>
-            <h2 class="status-modal-title" id="status-modal-title">Add to your library</h2>
+            <h2 class="status-modal-title" id="status-modal-title">Book Title</h2>
             <p class="status-modal-book" id="status-modal-book"></p>
         </header>
         <div class="status-modal-options" id="reading-status-options"></div>
@@ -106,16 +106,6 @@
                    inputmode="decimal"
                    placeholder="e.g. 4.5" />
             <p class="status-modal-helper">Capture your personal score between 0 and 5.</p>
-        </div>
-        <div class="status-modal-form-group">
-            <label for="author-avatar" class="status-modal-label">Author avatar URL (optional)</label>
-            <input type="url"
-                   id="author-avatar"
-                   class="status-modal-input"
-                   name="author-avatar"
-                   maxlength="500"
-                   placeholder="https://example.com/avatar.jpg" />
-            <p class="status-modal-helper">We'll store this image with the author in your library.</p>
         </div>
         <div class="status-modal-form-group">
             <label for="remark-content" class="status-modal-label">Personal remark (optional)</label>
@@ -166,7 +156,6 @@
         const ratingInput = document.getElementById('book-rating');
         const remarkTitleInput = document.getElementById('remark-title');
         const remarkContentInput = document.getElementById('remark-content');
-        const authorAvatarInput = document.getElementById('author-avatar');
 
         const readingStatusOptions = [
             {
@@ -385,11 +374,11 @@
             resetSupplementaryFields();
 
             if (statusModalBook) {
-                statusModalBook.textContent = `${book.title} · ${book.author}`;
+                statusModalBook.textContent = `by ${book.author}`;
             }
 
-            if (authorAvatarInput) {
-                authorAvatarInput.value = buildDefaultAuthorAvatar(book.author);
+            if (document.getElementById('status-modal-title')) {
+                document.getElementById('status-modal-title').textContent = book.title;
             }
 
             const radios = statusOptionsContainer?.querySelectorAll('input[name="reading-status"]');
@@ -467,12 +456,10 @@
             }
 
             const remarkPayload = buildRemarkPayload();
-            const authorAvatarUrl = sanitizeOptionalText(authorAvatarInput?.value, 500);
 
             const payload = buildBookPayload(selectedBook, selectedStatus, {
                 rating: ratingValue,
-                remark: remarkPayload,
-                avatarUrl: authorAvatarUrl
+                remark: remarkPayload
             });
 
             if (!payload.Title || !payload.Author) {
@@ -568,7 +555,7 @@
 
             const personalRating = normalizeRatingValue(extras.rating);
             const publicRating = normalizeRatingValue(book.publicRating);
-            const avatarUrl = sanitizeOptionalText(extras.avatarUrl, 500);
+            const avatarUrl = buildDefaultAuthorAvatar(book.author);
 
             const payload = {
                 Title: title,
@@ -581,12 +568,9 @@
                 Status: normalizedStatus,
                 IsFavorite: false,
                 PersonalRating: personalRating,
-                PublicRating: publicRating
+                PublicRating: publicRating,
+                AuthorAvatarUrl: avatarUrl
             };
-
-            if (avatarUrl) {
-                payload.AuthorAvatarUrl = avatarUrl;
-            }
 
             if (extras.remark) {
                 payload.Remarks = [extras.remark];
@@ -647,10 +631,6 @@
 
             if (remarkContentInput) {
                 remarkContentInput.value = '';
-            }
-
-            if (authorAvatarInput) {
-                authorAvatarInput.value = '';
             }
         }
 
