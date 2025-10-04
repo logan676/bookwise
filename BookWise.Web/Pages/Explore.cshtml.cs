@@ -32,14 +32,8 @@ namespace BookWise.Web.Pages
             ViewData["Title"] = "Explore";
             var cancellationToken = HttpContext.RequestAborted;
             Authors = await LoadAuthorsAsync(cancellationToken);
-            (QuoteOfTheDay, Quotes) = BuildQuotes();
-
-            var (fallbackAuthors, series, adaptations) = BuildRecommendations();
-            RecommendedSeries = series;
-            RecommendedAdaptations = adaptations;
-
-            var dynamicAuthors = await LoadRecommendedAuthorsAsync(cancellationToken);
-            RecommendedAuthors = dynamicAuthors.Count > 0 ? dynamicAuthors : fallbackAuthors;
+            (QuoteOfTheDay, Quotes) = await LoadQuotesAsync(cancellationToken);
+            RecommendedAuthors = await LoadRecommendedAuthorsAsync(cancellationToken);
         }
 
         private async Task<IReadOnlyList<AuthorProfile>> LoadAuthorsAsync(CancellationToken cancellationToken)
@@ -120,6 +114,37 @@ namespace BookWise.Web.Pages
                 .ToList();
 
             return grouped;
+        }
+
+        private async Task<(QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteCard> Quotes)> LoadQuotesAsync(CancellationToken cancellationToken)
+        {
+            var quoteEntities = await _context.BookQuotes
+                .AsNoTracking()
+                .Include(q => q.Book)
+                .OrderByDescending(q => q.AddedOn)
+                .ToListAsync(cancellationToken);
+
+            if (quoteEntities.Count == 0)
+            {
+                return (QuoteCard.Empty, Array.Empty<QuoteCard>());
+            }
+
+            var cards = quoteEntities
+                .Select(q => new QuoteCard
+                {
+                    Text = q.Text,
+                    Author = q.Author,
+                    Source = q.Source,
+                    BackgroundImageUrl = !string.IsNullOrWhiteSpace(q.BackgroundImageUrl)
+                        ? q.BackgroundImageUrl
+                        : string.IsNullOrWhiteSpace(q.Book?.CoverImageUrl) ? null : q.Book?.CoverImageUrl
+                })
+                .ToList();
+
+            var quoteOfTheDay = cards[0];
+            var remaining = cards.Skip(1).ToList();
+
+            return (quoteOfTheDay, remaining);
         }
 
         private RecommendedAuthor MapToRecommendedAuthor(AuthorRecommendation recommendation)
@@ -255,139 +280,6 @@ namespace BookWise.Web.Pages
 
             var slug = builder.ToString().Trim('-');
             return string.IsNullOrWhiteSpace(slug) ? "author" : slug;
-        }
-
-        private static (QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteCard> Quotes) BuildQuotes()
-        {
-            var quoteOfTheDay = new QuoteCard
-            {
-                Text = "The only way to do great work is to love what you do.",
-                Author = "Steve Jobs",
-                Source = "From 'The Innovator's Dilemma' by Clayton Christensen",
-                BackgroundImageUrl = "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=1600&q=80"
-            };
-
-            var quotes = new List<QuoteCard>
-            {
-                new()
-                {
-                    Text = "The greatest glory in living lies not in never falling, but in rising every time we fall.",
-                    Author = "Nelson Mandela",
-                    Source = "Long Walk to Freedom"
-                },
-                new()
-                {
-                    Text = "The way to get started is to quit talking and begin doing.",
-                    Author = "Walt Disney"
-                },
-                new()
-                {
-                    Text = "Your time is limited, so don't waste it living someone else's life.",
-                    Author = "Steve Jobs",
-                    Source = "Stanford Commencement"
-                },
-                new()
-                {
-                    Text = "It always seems impossible until it's done.",
-                    Author = "Nelson Mandela"
-                },
-                new()
-                {
-                    Text = "Imagination is more important than knowledge.",
-                    Author = "Albert Einstein"
-                }
-            };
-
-            return (quoteOfTheDay, quotes);
-        }
-
-        private static (IReadOnlyList<RecommendedAuthor> Authors, IReadOnlyList<RecommendedSeriesItem> Series, IReadOnlyList<RecommendedAdaptation> Adaptations) BuildRecommendations()
-        {
-            var authors = new List<RecommendedAuthor>
-            {
-                new()
-                {
-                    Name = "Jane Doe",
-                    Description = "Master of historical fiction with a modern twist.",
-                    ImageUrl = "https://i.pravatar.cc/150?img=1"
-                },
-                new()
-                {
-                    Name = "John Smith",
-                    Description = "Award-winning author of gripping sci-fi thrillers.",
-                    ImageUrl = "https://i.pravatar.cc/150?img=2"
-                },
-                new()
-                {
-                    Name = "Emily White",
-                    Description = "Bestselling writer of cozy mysteries and heartwarming tales.",
-                    ImageUrl = "https://i.pravatar.cc/150?img=3"
-                }
-            };
-
-            var series = new List<RecommendedSeriesItem>
-            {
-                new()
-                {
-                    Title = "The Sunstone Saga",
-                    Installment = "Book 1",
-                    CoverUrl = "https://covers.openlibrary.org/b/id/8225261-L.jpg"
-                },
-                new()
-                {
-                    Title = "The Sunstone Saga",
-                    Installment = "Book 2",
-                    CoverUrl = "https://covers.openlibrary.org/b/id/12593687-L.jpg"
-                },
-                new()
-                {
-                    Title = "The Starfall Chronicles",
-                    Installment = "Book 1",
-                    CoverUrl = "https://covers.openlibrary.org/b/id/8091016-L.jpg"
-                },
-                new()
-                {
-                    Title = "The Starfall Chronicles",
-                    Installment = "Book 2",
-                    CoverUrl = "https://covers.openlibrary.org/b/id/8091017-L.jpg"
-                }
-            };
-
-            var adaptations = new List<RecommendedAdaptation>
-            {
-                new()
-                {
-                    Title = "Movie 1",
-                    Type = "Movie",
-                    ImageUrl = "https://picsum.photos/300/400?random=1"
-                },
-                new()
-                {
-                    Title = "TV Show 1",
-                    Type = "TV Show",
-                    ImageUrl = "https://picsum.photos/300/400?random=2"
-                },
-                new()
-                {
-                    Title = "Movie 2",
-                    Type = "Movie",
-                    ImageUrl = "https://picsum.photos/300/400?random=3"
-                },
-                new()
-                {
-                    Title = "TV Show 2",
-                    Type = "TV Show",
-                    ImageUrl = "https://picsum.photos/300/400?random=4"
-                },
-                new()
-                {
-                    Title = "Movie 3",
-                    Type = "Movie",
-                    ImageUrl = "https://picsum.photos/300/400?random=5"
-                }
-            };
-
-            return (authors, series, adaptations);
         }
 
 
