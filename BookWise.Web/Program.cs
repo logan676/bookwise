@@ -9,11 +9,14 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using BookWise.Web.Data;
 using BookWise.Web.Models;
+using BookWise.Web.Options;
+using BookWise.Web.Services.Recommendations;
 using HtmlAgilityPack;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +31,22 @@ builder.Services.AddHttpClient("DoubanBooks", client =>
     client.BaseAddress = new Uri("https://book.douban.com/");
     client.Timeout = TimeSpan.FromSeconds(10);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 (+https://bookwise.local)");
+});
+
+builder.Services.Configure<DeepSeekOptions>(builder.Configuration.GetSection("DeepSeek"));
+builder.Services.AddSingleton<AuthorRecommendationQueue>();
+builder.Services.AddSingleton<IAuthorRecommendationScheduler, AuthorRecommendationScheduler>();
+builder.Services.AddScoped<IAuthorRecommendationRefresher, AuthorRecommendationRefresher>();
+builder.Services.AddHostedService<AuthorRecommendationWorker>();
+builder.Services.AddHttpClient<IDeepSeekRecommendationClient, DeepSeekRecommendationClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<DeepSeekOptions>>().Value;
+    if (Uri.TryCreate(options.Endpoint, UriKind.Absolute, out var endpoint))
+    {
+        client.BaseAddress = endpoint;
+    }
+
+    client.Timeout = TimeSpan.FromSeconds(45);
 });
 
 builder.Services.AddDbContext<BookWiseContext>(options =>
@@ -181,25 +200,33 @@ books.MapGet("/{id:int}", async (int id, BookWiseContext db, ILogger<Program> lo
     return Results.Ok(book);
 });
 
-books.MapPost("", async (CreateBookRequest request, BookWiseContext db, ILogger<Program> logger) =>
+books.MapPost("", async (
+    CreateBookRequest request,
+    BookWiseContext db,
+    ILogger<Program> logger,
+    IAuthorRecommendationScheduler recommendationScheduler,
+    CancellationToken cancellationToken) =>
 {
     var operationId = Guid.NewGuid();
     var timer = Stopwatch.StartNew();
+
+    var normalizedRequest = request.WithNormalizedData();
+
     logger.LogInformation(
         "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', rating={Rating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
         operationId,
-        request.Title,
-        request.Author,
-        request.Status,
-        request.Category,
-        request.Isbn ?? "N/A",
-        request.Rating,
-        request.IsFavorite,
-        !string.IsNullOrWhiteSpace(request.Quote),
-        request.Remarks?.Length ?? 0);
+        normalizedRequest.Title,
+        normalizedRequest.Author,
+        normalizedRequest.Status,
+        normalizedRequest.Category,
+        normalizedRequest.Isbn ?? "N/A",
+        normalizedRequest.Rating,
+        normalizedRequest.IsFavorite,
+        !string.IsNullOrWhiteSpace(normalizedRequest.Quote),
+        normalizedRequest.Remarks?.Length ?? 0);
 
     var validationResults = new List<ValidationResult>();
-    if (!Validator.TryValidateObject(request, new ValidationContext(request), validationResults, true))
+    if (!Validator.TryValidateObject(normalizedRequest, new ValidationContext(normalizedRequest), validationResults, true))
     {
         logger.LogWarning("[{OperationId}] Create validation failed with {Count} errors", operationId, validationResults.Count);
         return Results.ValidationProblem(validationResults
@@ -207,9 +234,11 @@ books.MapPost("", async (CreateBookRequest request, BookWiseContext db, ILogger<
             .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
     }
 
-    var entity = request.ToEntity();
-    await db.Books.AddAsync(entity);
-    await db.SaveChangesAsync();
+    var entity = normalizedRequest.ToEntity();
+    await db.Books.AddAsync(entity, cancellationToken);
+    await db.SaveChangesAsync(cancellationToken);
+
+    await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { entity.Author }, cancellationToken);
 
     timer.Stop();
     logger.LogInformation(
@@ -224,21 +253,24 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
 {
     var operationId = Guid.NewGuid();
     var timer = Stopwatch.StartNew();
+
+    var normalizedRequest = request.WithNormalizedData();
+
     logger.LogInformation(
         "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', rating={Rating}, favorite={Favorite}, quoteProvided={HasQuote}",
         operationId,
         id,
-        request.Title,
-        request.Author,
-        request.Status,
-        request.Category,
-        request.Isbn ?? "N/A",
-        request.Rating,
-        request.IsFavorite,
-        !string.IsNullOrWhiteSpace(request.Quote));
+        normalizedRequest.Title,
+        normalizedRequest.Author,
+        normalizedRequest.Status,
+        normalizedRequest.Category,
+        normalizedRequest.Isbn ?? "N/A",
+        normalizedRequest.Rating,
+        normalizedRequest.IsFavorite,
+        !string.IsNullOrWhiteSpace(normalizedRequest.Quote));
 
     var validationResults = new List<ValidationResult>();
-    if (!Validator.TryValidateObject(request, new ValidationContext(request), validationResults, true))
+    if (!Validator.TryValidateObject(normalizedRequest, new ValidationContext(normalizedRequest), validationResults, true))
     {
         logger.LogWarning("[{OperationId}] Update validation failed for book {Id} with {Count} errors", operationId, id, validationResults.Count);
         return Results.ValidationProblem(validationResults
@@ -253,7 +285,7 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
         return Results.NotFound();
     }
 
-    request.Apply(book);
+    normalizedRequest.Apply(book);
     await db.SaveChangesAsync();
 
     timer.Stop();
@@ -380,24 +412,40 @@ record CreateBookRequest(
     CreateBookRemark[]? Remarks = null
 ) : IValidatableObject
 {
+    public CreateBookRequest WithNormalizedData()
+    {
+        var normalizedRemarks = NormalizeRemarks(Remarks);
+
+        return this with
+        {
+            Title = TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty,
+            Author = TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty,
+            Description = TrimToLength(Description, 2000),
+            Quote = TrimToLength(Quote, 500),
+            CoverImageUrl = TrimToLength(CoverImageUrl, 500),
+            Category = TrimToLength(Category, 100),
+            Isbn = NormalizeIsbn(Isbn),
+            Status = NormalizeStatus(Status),
+            Remarks = normalizedRemarks
+        };
+    }
+
     public Book ToEntity()
     {
-        var entity = new Book
+        return new Book
         {
-            Title = Title.Trim(),
-            Author = Author.Trim(),
-            Description = Description?.Trim(),
-            Quote = Quote?.Trim(),
-            CoverImageUrl = CoverImageUrl?.Trim(),
-            Category = Category?.Trim(),
+            Title = TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty,
+            Author = TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty,
+            Description = TrimToLength(Description, 2000),
+            Quote = TrimToLength(Quote, 500),
+            CoverImageUrl = TrimToLength(CoverImageUrl, 500),
+            Category = TrimToLength(Category, 100),
             ISBN = NormalizeIsbn(Isbn),
             Status = NormalizeStatus(Status),
             IsFavorite = IsFavorite,
             Rating = Rating,
             Remarks = BuildRemarks()
         };
-
-        return entity;
     }
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
@@ -415,13 +463,19 @@ record CreateBookRequest(
                 continue;
             }
 
+            var normalizedRemark = remark.Normalize();
+            if (string.IsNullOrWhiteSpace(normalizedRemark.Content))
+            {
+                continue;
+            }
+
             var validationResults = new List<ValidationResult>();
-            var remarkContext = new ValidationContext(remark)
+            var remarkContext = new ValidationContext(normalizedRemark)
             {
                 MemberName = $"Remarks[{index}]"
             };
 
-            if (Validator.TryValidateObject(remark, remarkContext, validationResults, validateAllProperties: true))
+            if (Validator.TryValidateObject(normalizedRemark, remarkContext, validationResults, validateAllProperties: true))
             {
                 continue;
             }
@@ -437,6 +491,27 @@ record CreateBookRequest(
 
     private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();
 
+    internal static string? TrimToLength(string? value, int maxLength, bool allowEmpty = false)
+    {
+        if (value is null)
+        {
+            return allowEmpty ? string.Empty : null;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+        {
+            return allowEmpty ? string.Empty : null;
+        }
+
+        if (trimmed.Length > maxLength)
+        {
+            trimmed = trimmed[..maxLength];
+        }
+
+        return trimmed;
+    }
+
     public static string? NormalizeIsbn(string? isbn)
     {
         if (string.IsNullOrWhiteSpace(isbn))
@@ -444,21 +519,133 @@ record CreateBookRequest(
             return null;
         }
 
-        var builder = new StringBuilder(isbn.Length);
-        foreach (var ch in isbn)
+        var sequences = new List<string>();
+        var current = new StringBuilder();
+
+        void Flush()
         {
-            if (char.IsDigit(ch) || ch is 'x' or 'X')
+            if (current.Length > 0)
             {
-                builder.Append(char.ToUpperInvariant(ch));
+                sequences.Add(current.ToString());
+                current.Clear();
             }
         }
 
-        if (builder.Length == 0)
+        foreach (var ch in isbn)
+        {
+            if (char.IsDigit(ch))
+            {
+                current.Append(ch);
+            }
+            else if (ch is 'x' or 'X')
+            {
+                current.Append('X');
+            }
+            else if (ch is '-' or ' ' or '\u00A0')
+            {
+                continue;
+            }
+            else
+            {
+                Flush();
+            }
+        }
+
+        Flush();
+
+        if (sequences.Count == 0)
         {
             return null;
         }
 
-        return builder.ToString();
+        string? TryExtract(int length, bool requirePrefix)
+        {
+            foreach (var sequence in sequences)
+            {
+                var candidate = ExtractFromSequence(sequence, length, requirePrefix);
+                if (candidate is not null)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+
+        string? ExtractFromSequence(string sequence, int length, bool requirePrefix)
+        {
+            if (sequence.Length < length)
+            {
+                return null;
+            }
+
+            for (var index = 0; index <= sequence.Length - length; index++)
+            {
+                var segment = sequence.Substring(index, length);
+                if (requirePrefix && !IsIsbn13Prefix(segment))
+                {
+                    continue;
+                }
+
+                if (length == 10 && !IsValidIsbn10Segment(segment))
+                {
+                    continue;
+                }
+
+                return segment;
+            }
+
+            return null;
+        }
+
+        static bool IsIsbn13Prefix(string value) => value.Length >= 3 &&
+            (value.StartsWith("978", StringComparison.Ordinal) || value.StartsWith("979", StringComparison.Ordinal));
+
+        static bool IsValidIsbn10Segment(string value)
+        {
+            if (value.Length != 10)
+            {
+                return false;
+            }
+
+            if (!value[..9].All(char.IsDigit))
+            {
+                return false;
+            }
+
+            var last = value[^1];
+            return char.IsDigit(last) || last == 'X';
+        }
+
+        var isbn13 = TryExtract(13, requirePrefix: true) ?? TryExtract(13, requirePrefix: false);
+        if (isbn13 is not null)
+        {
+            return isbn13;
+        }
+
+        var isbn10 = TryExtract(10, requirePrefix: false);
+        if (isbn10 is not null)
+        {
+            return isbn10;
+        }
+
+        return null;
+    }
+
+    private static CreateBookRemark[]? NormalizeRemarks(CreateBookRemark[]? remarks)
+    {
+        if (remarks is null || remarks.Length == 0)
+        {
+            return null;
+        }
+
+        var normalized = remarks
+            .Where(remark => remark is not null)
+            .Select(remark => remark!.Normalize())
+            .Where(remark => !string.IsNullOrWhiteSpace(remark.Content))
+            .ToArray();
+
+        return normalized.Length == 0 ? null : normalized;
     }
 
     private List<BookRemark> BuildRemarks()
@@ -476,7 +663,7 @@ record CreateBookRequest(
                 continue;
             }
 
-            var entity = remark.ToEntity();
+            var entity = remark.Normalize().ToEntity();
             if (entity is null)
             {
                 continue;
@@ -494,18 +681,30 @@ record CreateBookRemark(
     [property: Required, MaxLength(4000)] string Content
 )
 {
+    public CreateBookRemark Normalize()
+    {
+        var normalizedTitle = CreateBookRequest.TrimToLength(Title, 200);
+        var normalizedContent = CreateBookRequest.TrimToLength(Content, 4000) ?? string.Empty;
+
+        return this with
+        {
+            Title = normalizedTitle,
+            Content = normalizedContent
+        };
+    }
+
     public BookRemark? ToEntity()
     {
-        var trimmedContent = Content?.Trim();
-        if (string.IsNullOrWhiteSpace(trimmedContent))
+        var normalized = Normalize();
+        if (string.IsNullOrWhiteSpace(normalized.Content))
         {
             return null;
         }
 
         return new BookRemark
         {
-            Title = string.IsNullOrWhiteSpace(Title) ? null : Title.Trim(),
-            Content = trimmedContent,
+            Title = normalized.Title,
+            Content = normalized.Content,
             Type = BookRemarkType.Mine,
             AddedOn = DateTimeOffset.UtcNow
         };
@@ -525,37 +724,58 @@ record UpdateBookRequest(
     [property: Range(0, 5)] decimal? Rating
 )
 {
+    public UpdateBookRequest WithNormalizedData() => this with
+    {
+        Title = CreateBookRequest.TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty,
+        Author = CreateBookRequest.TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty,
+        Description = CreateBookRequest.TrimToLength(Description, 2000),
+        Quote = CreateBookRequest.TrimToLength(Quote, 500),
+        CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500),
+        Category = CreateBookRequest.TrimToLength(Category, 100),
+        Isbn = CreateBookRequest.NormalizeIsbn(Isbn),
+        Status = NormalizeStatus(Status)
+    };
+
     public void Apply(Book book)
     {
-        book.Title = Title.Trim();
-        book.Author = Author.Trim();
-        book.Description = Description?.Trim();
-        book.Quote = Quote?.Trim();
-        book.CoverImageUrl = CoverImageUrl?.Trim();
-        book.Category = Category?.Trim();
-        book.ISBN = NormalizeIsbn(Isbn);
+        book.Title = CreateBookRequest.TrimToLength(Title, 200, allowEmpty: true) ?? string.Empty;
+        book.Author = CreateBookRequest.TrimToLength(Author, 200, allowEmpty: true) ?? string.Empty;
+        book.Description = CreateBookRequest.TrimToLength(Description, 2000);
+        book.Quote = CreateBookRequest.TrimToLength(Quote, 500);
+        book.CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500);
+        book.Category = CreateBookRequest.TrimToLength(Category, 100);
+        book.ISBN = CreateBookRequest.NormalizeIsbn(Isbn);
         book.Status = NormalizeStatus(Status);
         book.IsFavorite = IsFavorite;
         book.Rating = Rating;
     }
 
     private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();
-
-    private static string? NormalizeIsbn(string? isbn) => CreateBookRequest.NormalizeIsbn(isbn);
 }
 
-record BookSearchRequest(string Query, string? SearchBy = "title")
+record BookSearchRequest(string Query, string? SearchBy = null)
 {
-    public BookSearchScope GetScope() =>
-        string.Equals(SearchBy, "author", StringComparison.OrdinalIgnoreCase)
-            ? BookSearchScope.Author
-            : BookSearchScope.Title;
+    public BookSearchScope GetScope()
+    {
+        if (string.Equals(SearchBy, "author", StringComparison.OrdinalIgnoreCase))
+        {
+            return BookSearchScope.Author;
+        }
+
+        if (string.Equals(SearchBy, "title", StringComparison.OrdinalIgnoreCase))
+        {
+            return BookSearchScope.Title;
+        }
+
+        return BookSearchScope.Auto;
+    }
 }
 
 record BookSearchResponse(BookSuggestion[] Books);
 
 enum BookSearchScope
 {
+    Auto,
     Title,
     Author
 }
@@ -584,6 +804,8 @@ static class JsonOptions
 static class DoubanBookSearch
 {
     private const int MaxResults = 5;
+    private const int AuthorSuggestionLimit = 15;
+    private const int AutoSuggestionLimit = MaxResults * 2;
     private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
     private static readonly (string Category, string[] Keywords)[] CategoryMappings = new[]
     {
@@ -654,7 +876,17 @@ static class DoubanBookSearch
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        var suggestionLimit = scope == BookSearchScope.Author ? 15 : MaxResults;
+        if (scope == BookSearchScope.Auto)
+        {
+            return await FetchSuggestionsForAutoAsync(
+                query,
+                client,
+                logger,
+                operationId,
+                cancellationToken);
+        }
+
+        var suggestionLimit = scope == BookSearchScope.Author ? AuthorSuggestionLimit : MaxResults;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var results = new List<DoubanSuggestion>(suggestionLimit);
         var queries = scope == BookSearchScope.Author
@@ -733,6 +965,66 @@ static class DoubanBookSearch
         }
 
         return results;
+    }
+
+    private static async Task<List<DoubanSuggestion>> FetchSuggestionsForAutoAsync(
+        string query,
+        HttpClient client,
+        ILogger logger,
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        var combined = new List<DoubanSuggestion>(AutoSuggestionLimit);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static string KeyFor(DoubanSuggestion suggestion) => suggestion.DetailUri.AbsoluteUri;
+
+        var titleSuggestions = await FetchSuggestionsAsync(
+            query,
+            BookSearchScope.Title,
+            client,
+            logger,
+            operationId,
+            cancellationToken);
+
+        foreach (var suggestion in titleSuggestions)
+        {
+            if (seen.Add(KeyFor(suggestion)))
+            {
+                combined.Add(suggestion);
+                if (combined.Count >= AutoSuggestionLimit)
+                {
+                    return combined;
+                }
+            }
+        }
+
+        if (combined.Count >= AutoSuggestionLimit)
+        {
+            return combined;
+        }
+
+        var authorSuggestions = await FetchSuggestionsAsync(
+            query,
+            BookSearchScope.Author,
+            client,
+            logger,
+            operationId,
+            cancellationToken);
+
+        foreach (var suggestion in authorSuggestions)
+        {
+            if (seen.Add(KeyFor(suggestion)))
+            {
+                combined.Add(suggestion);
+                if (combined.Count >= AutoSuggestionLimit)
+                {
+                    break;
+                }
+            }
+        }
+
+        return combined;
     }
 
     private static async Task<BookSuggestion?> FetchBookDetailsAsync(
@@ -857,17 +1149,26 @@ static class DoubanBookSearch
         var category = InferCategory(document, title, description);
         var rating = ParseRating(document);
 
+        var sanitizedTitle = HtmlEntity.DeEntitize(title);
+        var sanitizedAuthor = string.IsNullOrWhiteSpace(author) ? "未知作者" : HtmlEntity.DeEntitize(author);
+        var sanitizedDescription = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(description) ? null : HtmlEntity.DeEntitize(description), 2000);
+        var sanitizedQuote = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(quote) ? null : HtmlEntity.DeEntitize(quote), 500);
+        var sanitizedCategory = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(category) ? null : HtmlEntity.DeEntitize(category), 100);
+        var sanitizedPublished = string.IsNullOrWhiteSpace(published) ? null : HtmlEntity.DeEntitize(published);
+        var sanitizedLanguage = string.IsNullOrWhiteSpace(language) ? null : HtmlEntity.DeEntitize(language);
+        var sanitizedCover = string.IsNullOrWhiteSpace(cover) ? null : NormalizeCoverUrl(cover);
+
         return new BookSuggestion(
-            HtmlEntity.DeEntitize(title),
-            string.IsNullOrWhiteSpace(author) ? "未知作者" : HtmlEntity.DeEntitize(author),
-            string.IsNullOrWhiteSpace(description) ? null : HtmlEntity.DeEntitize(description),
-            string.IsNullOrWhiteSpace(quote) ? null : HtmlEntity.DeEntitize(quote),
-            string.IsNullOrWhiteSpace(category) ? null : HtmlEntity.DeEntitize(category),
+            sanitizedTitle,
+            sanitizedAuthor,
+            sanitizedDescription,
+            sanitizedQuote,
+            sanitizedCategory,
             string.IsNullOrWhiteSpace(isbn) ? null : isbn,
             rating,
-            string.IsNullOrWhiteSpace(published) ? null : HtmlEntity.DeEntitize(published),
-            string.IsNullOrWhiteSpace(language) ? null : HtmlEntity.DeEntitize(language),
-            string.IsNullOrWhiteSpace(cover) ? null : NormalizeCoverUrl(cover));
+            sanitizedPublished,
+            sanitizedLanguage,
+            sanitizedCover);
     }
 
     private static decimal? ParseRating(HtmlDocument document)
@@ -929,17 +1230,28 @@ static class DoubanBookSearch
 
     private static string? InferCategory(HtmlDocument document, string title, string? description)
     {
-        var tagNode = document.DocumentNode.SelectSingleNode("//div[@id='db-tags-section']//a");
-        var tagText = NormalizeWhitespace(HtmlEntity.DeEntitize(tagNode?.InnerText ?? string.Empty));
-        if (!string.IsNullOrWhiteSpace(tagText))
+        static string? SanitizeCategory(string? value)
         {
-            return tagText;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            var normalized = NormalizeWhitespace(value);
+            return CreateBookRequest.TrimToLength(normalized, 100);
         }
 
-        var series = GetInfoValue(document, "丛书");
-        if (!string.IsNullOrWhiteSpace(series))
+        var tagNode = document.DocumentNode.SelectSingleNode("//div[@id='db-tags-section']//a");
+        var tagCandidate = SanitizeCategory(HtmlEntity.DeEntitize(tagNode?.InnerText ?? string.Empty));
+        if (tagCandidate is not null)
         {
-            return series;
+            return tagCandidate;
+        }
+
+        var seriesCandidate = SanitizeCategory(GetInfoValue(document, "丛书"));
+        if (seriesCandidate is not null)
+        {
+            return seriesCandidate;
         }
 
         var normalized = (title + " " + (description ?? string.Empty)).ToLowerInvariant();
@@ -950,21 +1262,21 @@ static class DoubanBookSearch
             {
                 if (normalized.Contains(keyword, StringComparison.OrdinalIgnoreCase))
                 {
-                    return category;
+                    return CreateBookRequest.TrimToLength(category, 100);
                 }
             }
         }
 
-        var publisher = GetInfoValue(document, "出版社");
-        if (!string.IsNullOrWhiteSpace(publisher))
+        var publisherCandidate = SanitizeCategory(GetInfoValue(document, "出版社"));
+        if (publisherCandidate is not null)
         {
-            return publisher;
+            return publisherCandidate;
         }
 
-        var producer = GetInfoValue(document, "出品方");
-        if (!string.IsNullOrWhiteSpace(producer))
+        var producerCandidate = SanitizeCategory(GetInfoValue(document, "出品方"));
+        if (producerCandidate is not null)
         {
-            return producer;
+            return producerCandidate;
         }
 
         return null;
@@ -1154,15 +1466,36 @@ static class DoubanBookSearch
                 continue;
             }
 
-            var parent = span.ParentNode;
-            if (parent is null)
+            var builder = new StringBuilder();
+            for (var node = span.NextSibling; node is not null; node = node.NextSibling)
             {
-                continue;
+                if (string.Equals(node.Name, "br", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                if (node.NodeType == HtmlNodeType.Element && string.Equals(node.GetAttributeValue("class", string.Empty), "pl", StringComparison.OrdinalIgnoreCase))
+                {
+                    break;
+                }
+
+                var segment = HtmlEntity.DeEntitize(node.InnerText);
+                segment = NormalizeWhitespace(segment);
+
+                if (string.IsNullOrWhiteSpace(segment))
+                {
+                    continue;
+                }
+
+                if (builder.Length > 0)
+                {
+                    builder.Append(' ');
+                }
+
+                builder.Append(segment);
             }
 
-            var rawValue = HtmlEntity.DeEntitize(parent.InnerText);
-            rawValue = rawValue.Replace(span.InnerText, string.Empty, StringComparison.Ordinal);
-            var cleaned = NormalizeWhitespace(rawValue);
+            var cleaned = NormalizeWhitespace(builder.ToString());
             cleaned = cleaned.Trim(':', '：');
 
             return string.IsNullOrWhiteSpace(cleaned) ? null : cleaned;

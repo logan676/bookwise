@@ -30,6 +30,9 @@ namespace BookWise.Web.Pages
         public string? Category { get; set; }
 
         [BindProperty]
+        public string? Quote { get; set; }
+
+        [BindProperty]
         public string? Description { get; set; }
 
         [BindProperty]
@@ -65,6 +68,7 @@ namespace BookWise.Web.Pages
                 Author = Author,
                 ISBN = ISBN,
                 Category = Category,
+                Quote = Quote,
                 Description = Description,
                 CoverImageUrl = CoverImageUrl,
                 Rating = Rating,

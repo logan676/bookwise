@@ -49,96 +49,112 @@
                     <div class="authors-panel-header">
                         <h2>Authors</h2>
                     </div>
-                    <ul class="author-list" role="tablist">
+                    @if (!Model.Authors.Any())
+                    {
+                        <p class="author-empty-message">Add a book to your shelf to see authors here.</p>
+                    }
+                    else
+                    {
+                        <ul class="author-list" role="tablist">
+                            @foreach (var author in Model.Authors)
+                            {
+                                var isActive = author == activeAuthor;
+                                var paneId = $"author-pane-{author.Slug}";
+                                <li class="author-item @(isActive ? "is-active" : null)">
+                                    <button type="button"
+                                            id="tab-@author.Slug"
+                                            class="author-button"
+                                            role="tab"
+                                            aria-controls="@paneId"
+                                            aria-selected="@(isActive ? "true" : "false")"
+                                            data-author="@author.Slug">
+                                        <span class="author-avatar">
+                                            <img src="@author.PhotoUrl"
+                                                 alt="@author.Name"
+                                                 loading="lazy" />
+                                        </span>
+                                        <span class="author-text">
+                                            <span class="author-name">@author.Name</span>
+                                            <span class="author-meta">@author.WorkCount @((author.WorkCount == 1) ? "work" : "works")</span>
+                                        </span>
+                                        <span class="author-count" aria-hidden="true">@author.WorkCount</span>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </aside>
+
+                <section class="author-content">
+                    @if (!Model.Authors.Any())
+                    {
+                        <div class="author-empty-state">
+                            <p>Add a book to your shelf to unlock author insights.</p>
+                        </div>
+                    }
+                    else
+                    {
                         @foreach (var author in Model.Authors)
                         {
                             var isActive = author == activeAuthor;
                             var paneId = $"author-pane-{author.Slug}";
-                            <li class="author-item @(isActive ? "is-active" : null)">
-                                <button type="button"
-                                        id="tab-@author.Slug"
-                                        class="author-button"
-                                        role="tab"
-                                        aria-controls="@paneId"
-                                        aria-selected="@(isActive ? "true" : "false")"
-                                        data-author="@author.Slug">
-                                    <span class="author-avatar">
-                                        <img src="@author.PhotoUrl"
-                                             alt="@author.Name"
-                                             loading="lazy" />
-                                    </span>
-                                    <span class="author-text">
-                                        <span class="author-name">@author.Name</span>
-                                        <span class="author-meta">@author.WorkCount @((author.WorkCount == 1) ? "work" : "works")</span>
-                                    </span>
-                                    <span class="author-count" aria-hidden="true">@author.WorkCount</span>
-                                </button>
-                            </li>
+                            <article id="@paneId"
+                                     class="author-details-pane @(isActive ? "is-active" : null)"
+                                     role="tabpanel"
+                                     aria-labelledby="tab-@author.Slug"
+                                     data-author="@author.Slug">
+                                <header class="author-headline">
+                                    <h1 class="author-display-name">@author.Name</h1>
+                                    <p class="author-summary">@author.Summary</p>
+                                </header>
+
+                                <section class="author-collection">
+                                    <div class="collection-header">
+                                        <h2>Your Library</h2>
+                                        <p>Titles already on your shelf.</p>
+                                    </div>
+                                    <div class="author-book-strip" role="list">
+                                        @foreach (var book in author.Library)
+                                        {
+                                            <article class="author-book-card" role="listitem">
+                                                <div class="author-book-cover">
+                                                    <img src="@book.CoverUrl"
+                                                         alt="@book.Title cover"
+                                                         loading="lazy" />
+                                                </div>
+                                                <div class="author-book-info">
+                                                    <h3>@book.Title</h3>
+                                                    <p>@book.Subtitle</p>
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                </section>
+
+                                <section class="author-collection">
+                                    <div class="collection-header">
+                                        <h2>Available Works</h2>
+                                        <p>Explore more from this author.</p>
+                                    </div>
+                                    <div class="author-book-strip" role="list">
+                                        @foreach (var book in author.AvailableWorks)
+                                        {
+                                            <article class="author-book-card" role="listitem">
+                                                <div class="author-book-cover">
+                                                    <img src="@book.CoverUrl"
+                                                         alt="@book.Title cover"
+                                                         loading="lazy" />
+                                                </div>
+                                                <div class="author-book-info">
+                                                    <h3>@book.Title</h3>
+                                                    <p>@book.Subtitle</p>
+                                                </div>
+                                            </article>
+                                        }
+                                    </div>
+                                </section>
+                            </article>
                         }
-                    </ul>
-                </aside>
-
-                <section class="author-content">
-                    @foreach (var author in Model.Authors)
-                    {
-                        var isActive = author == activeAuthor;
-                        var paneId = $"author-pane-{author.Slug}";
-                        <article id="@paneId"
-                                 class="author-details-pane @(isActive ? "is-active" : null)"
-                                 role="tabpanel"
-                                 aria-labelledby="tab-@author.Slug"
-                                 data-author="@author.Slug">
-                            <header class="author-headline">
-                                <h1 class="author-display-name">@author.Name</h1>
-                                <p class="author-summary">@author.Summary</p>
-                            </header>
-
-                            <section class="author-collection">
-                                <div class="collection-header">
-                                    <h2>Your Library</h2>
-                                    <p>Titles already on your shelf.</p>
-                                </div>
-                                <div class="author-book-strip" role="list">
-                                    @foreach (var book in author.Library)
-                                    {
-                                        <article class="author-book-card" role="listitem">
-                                            <div class="author-book-cover">
-                                                <img src="@book.CoverUrl"
-                                                     alt="@book.Title cover"
-                                                     loading="lazy" />
-                                            </div>
-                                            <div class="author-book-info">
-                                                <h3>@book.Title</h3>
-                                                <p>@book.Subtitle</p>
-                                            </div>
-                                        </article>
-                                    }
-                                </div>
-                            </section>
-
-                            <section class="author-collection">
-                                <div class="collection-header">
-                                    <h2>Available Works</h2>
-                                    <p>Explore more from this author.</p>
-                                </div>
-                                <div class="author-book-strip" role="list">
-                                    @foreach (var book in author.AvailableWorks)
-                                    {
-                                        <article class="author-book-card" role="listitem">
-                                            <div class="author-book-cover">
-                                                <img src="@book.CoverUrl"
-                                                     alt="@book.Title cover"
-                                                     loading="lazy" />
-                                            </div>
-                                            <div class="author-book-info">
-                                                <h3>@book.Title</h3>
-                                                <p>@book.Subtitle</p>
-                                            </div>
-                                        </article>
-                                    }
-                                </div>
-                            </section>
-                        </article>
                     }
                 </section>
             </div>

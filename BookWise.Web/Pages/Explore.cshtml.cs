@@ -1,164 +1,259 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using BookWise.Web.Data;
+using BookWise.Web.Models;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookWise.Web.Pages
 {
     public class ExploreModel : PageModel
     {
-        public IReadOnlyList<AuthorProfile> Authors { get; private set; } = new List<AuthorProfile>();
-        public QuoteCard QuoteOfTheDay { get; private set; } = QuoteCard.Empty;
-        public IReadOnlyList<QuoteCard> Quotes { get; private set; } = new List<QuoteCard>();
-        public IReadOnlyList<RecommendedAuthor> RecommendedAuthors { get; private set; } = new List<RecommendedAuthor>();
-        public IReadOnlyList<RecommendedSeriesItem> RecommendedSeries { get; private set; } = new List<RecommendedSeriesItem>();
-        public IReadOnlyList<RecommendedAdaptation> RecommendedAdaptations { get; private set; } = new List<RecommendedAdaptation>();
+        private readonly BookWiseContext _context;
 
-        public void OnGet()
+        public ExploreModel(BookWiseContext context)
         {
-            ViewData["Title"] = "Explore";
-            Authors = BuildAuthors();
-            (QuoteOfTheDay, Quotes) = BuildQuotes();
-            (RecommendedAuthors, RecommendedSeries, RecommendedAdaptations) = BuildRecommendations();
+            _context = context;
         }
 
-        private static IReadOnlyList<AuthorProfile> BuildAuthors()
+        public IReadOnlyList<AuthorProfile> Authors { get; private set; } = Array.Empty<AuthorProfile>();
+        public QuoteCard QuoteOfTheDay { get; private set; } = QuoteCard.Empty;
+        public IReadOnlyList<QuoteCard> Quotes { get; private set; } = Array.Empty<QuoteCard>();
+        public IReadOnlyList<RecommendedAuthor> RecommendedAuthors { get; private set; } = Array.Empty<RecommendedAuthor>();
+        public IReadOnlyList<RecommendedSeriesItem> RecommendedSeries { get; private set; } = Array.Empty<RecommendedSeriesItem>();
+        public IReadOnlyList<RecommendedAdaptation> RecommendedAdaptations { get; private set; } = Array.Empty<RecommendedAdaptation>();
+
+        public async Task OnGetAsync()
         {
-            return new List<AuthorProfile>
+            ViewData["Title"] = "Explore";
+            var cancellationToken = HttpContext.RequestAborted;
+            Authors = await LoadAuthorsAsync(cancellationToken);
+            (QuoteOfTheDay, Quotes) = BuildQuotes();
+
+            var (fallbackAuthors, series, adaptations) = BuildRecommendations();
+            RecommendedSeries = series;
+            RecommendedAdaptations = adaptations;
+
+            var dynamicAuthors = await LoadRecommendedAuthorsAsync(cancellationToken);
+            RecommendedAuthors = dynamicAuthors.Count > 0 ? dynamicAuthors : fallbackAuthors;
+        }
+
+        private async Task<IReadOnlyList<AuthorProfile>> LoadAuthorsAsync(CancellationToken cancellationToken)
+        {
+            var books = await _context.Books
+                .AsNoTracking()
+                .OrderBy(book => book.Author)
+                .ThenBy(book => book.Title)
+                .ToListAsync(cancellationToken);
+
+            if (books.Count == 0)
             {
-                new()
+                return Array.Empty<AuthorProfile>();
+            }
+
+            var authorProfiles = books
+                .GroupBy(book => book.Author)
+                .Select(group =>
                 {
-                    Slug = "jrr-tolkien",
-                    Name = "J.R.R. Tolkien",
-                    Summary = "Creator of Middle-earth and author of The Lord of the Rings saga.",
-                    PhotoUrl = "https://i.pravatar.cc/96?img=54",
-                    WorkCount = 12,
-                    Library = new List<AuthorWork>
+                    var works = group.ToList();
+                    var libraryWorks = works
+                        .Where(book => IsLibraryStatus(book.Status))
+                        .OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
+                        .Select(MapToAuthorWork)
+                        .ToList();
+
+                    var availableWorks = works
+                        .Where(book => !IsLibraryStatus(book.Status))
+                        .OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
+                        .Select(MapToAuthorWork)
+                        .ToList();
+
+                    return new AuthorProfile
                     {
-                        new() { Title = "The Hobbit", Subtitle = "Middle-earth", CoverUrl = CoverById(14627509) },
-                        new() { Title = "The Fellowship of the Ring", Subtitle = "The Lord of the Rings", CoverUrl = CoverById(14627060) },
-                        new() { Title = "The Two Towers", Subtitle = "The Lord of the Rings", CoverUrl = CoverById(14627564) },
-                        new() { Title = "The Return of the King", Subtitle = "The Lord of the Rings", CoverUrl = CoverById(14627062) },
-                    },
-                    AvailableWorks = new List<AuthorWork>
-                    {
-                        new() { Title = "The Silmarillion", Subtitle = "Legendarium", CoverUrl = CoverById(14627042) },
-                        new() { Title = "Unfinished Tales", Subtitle = "Middle-earth", CoverUrl = CoverById(9293458) },
-                        new() { Title = "The Children of Húrin", Subtitle = "Legendarium", CoverUrl = CoverById(8220298) },
-                        new() { Title = "Beren and Lúthien", Subtitle = "Legendarium", CoverUrl = CoverById(12639912) },
-                        new() { Title = "The Fall of Gondolin", Subtitle = "Legendarium", CoverUrl = CoverById(12451486) },
-                        new() { Title = "Roverandom", Subtitle = "Fantasy", CoverUrl = CoverById(9293461) },
-                    }
-                },
-                new()
+                        Slug = GenerateSlug(group.Key),
+                        Name = group.Key,
+                        Summary = BuildAuthorSummary(works),
+                        PhotoUrl = BuildAuthorAvatarUrl(group.Key),
+                        WorkCount = works.Count,
+                        Library = libraryWorks,
+                        AvailableWorks = availableWorks
+                    };
+                })
+                .OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return authorProfiles;
+        }
+
+        private async Task<IReadOnlyList<RecommendedAuthor>> LoadRecommendedAuthorsAsync(CancellationToken cancellationToken)
+        {
+            var recommendations = await _context.AuthorRecommendations
+                .AsNoTracking()
+                .ToListAsync(cancellationToken);
+
+            if (recommendations.Count == 0)
+            {
+                return Array.Empty<RecommendedAuthor>();
+            }
+
+            var prioritized = recommendations
+                .OrderByDescending(r => r.ConfidenceScore ?? 0m)
+                .ThenByDescending(r => r.GeneratedAt)
+                .Take(24)
+                .ToList();
+
+            var grouped = prioritized
+                .GroupBy(r => r.RecommendedAuthor, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group
+                    .OrderByDescending(r => r.ConfidenceScore ?? 0m)
+                    .ThenByDescending(r => r.GeneratedAt)
+                    .First())
+                .OrderByDescending(r => r.ConfidenceScore ?? 0m)
+                .ThenByDescending(r => r.GeneratedAt)
+                .Take(6)
+                .Select(MapToRecommendedAuthor)
+                .ToList();
+
+            return grouped;
+        }
+
+        private RecommendedAuthor MapToRecommendedAuthor(AuthorRecommendation recommendation)
+        {
+            var description = !string.IsNullOrWhiteSpace(recommendation.Rationale)
+                ? recommendation.Rationale
+                : $"Readers who enjoy {recommendation.FocusAuthor} also like {recommendation.RecommendedAuthor}.";
+
+            var imageUrl = !string.IsNullOrWhiteSpace(recommendation.ImageUrl)
+                ? recommendation.ImageUrl!
+                : BuildAuthorAvatarUrl(recommendation.RecommendedAuthor);
+
+            return new RecommendedAuthor
+            {
+                Name = recommendation.RecommendedAuthor,
+                Description = description,
+                ImageUrl = imageUrl
+            };
+        }
+
+        private static AuthorWork MapToAuthorWork(Book book)
+        {
+            return new AuthorWork
+            {
+                Title = book.Title,
+                Subtitle = BuildBookSubtitle(book),
+                CoverUrl = string.IsNullOrWhiteSpace(book.CoverImageUrl)
+                    ? "/img/book-placeholder.svg"
+                    : book.CoverImageUrl
+            };
+        }
+
+        private static string BuildAuthorSummary(IReadOnlyCollection<Book> books)
+        {
+            var summarySource = books
+                .Select(book => book.Description)
+                .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+            if (!string.IsNullOrWhiteSpace(summarySource))
+            {
+                return TrimToLength(summarySource, 160);
+            }
+
+            var count = books.Count;
+            return count switch
+            {
+                0 => "No books yet for this author.",
+                1 => "You have 1 book from this author on your shelf.",
+                _ => $"You have {count} books from this author on your shelf."
+            };
+        }
+
+        private static string TrimToLength(string value, int maxLength)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length <= maxLength)
+            {
+                return value ?? string.Empty;
+            }
+
+            return value[..maxLength].TrimEnd() + "...";
+        }
+
+        private static string BuildAuthorAvatarUrl(string author)
+        {
+            if (string.IsNullOrWhiteSpace(author))
+            {
+                return "https://i.pravatar.cc/96?img=1";
+            }
+
+            var identifier = Uri.EscapeDataString(author.Trim());
+            return $"https://i.pravatar.cc/96?u={identifier}";
+        }
+
+        private static bool IsLibraryStatus(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                return false;
+            }
+
+            return status.Trim().ToLowerInvariant() is "reading" or "read";
+        }
+
+        private static string BuildBookSubtitle(Book book)
+        {
+            if (!string.IsNullOrWhiteSpace(book.Category))
+            {
+                return book.Category;
+            }
+
+            return NormalizeStatusLabel(book.Status);
+        }
+
+        private static string NormalizeStatusLabel(string? status)
+        {
+            return status?.Trim().ToLowerInvariant() switch
+            {
+                "reading" => "In progress",
+                "read" => "Completed",
+                "plan-to-read" => "On deck",
+                null or "" => "Uncategorized",
+                _ => status!
+            };
+        }
+
+        private static string GenerateSlug(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "author";
+            }
+
+            var lower = value.Trim().ToLowerInvariant();
+            var builder = new StringBuilder(lower.Length);
+            var previousWasHyphen = false;
+
+            foreach (var character in lower)
+            {
+                if (char.IsLetterOrDigit(character))
                 {
-                    Slug = "george-rr-martin",
-                    Name = "George R.R. Martin",
-                    Summary = "Epic fantasist behind A Song of Ice and Fire.",
-                    PhotoUrl = "https://i.pravatar.cc/96?img=12",
-                    WorkCount = 8,
-                    Library = new List<AuthorWork>
-                    {
-                        new() { Title = "A Game of Thrones", Subtitle = "A Song of Ice and Fire", CoverUrl = CoverById(4855) },
-                        new() { Title = "A Clash of Kings", Subtitle = "A Song of Ice and Fire", CoverUrl = CoverById(7323439) },
-                        new() { Title = "A Storm of Swords", Subtitle = "A Song of Ice and Fire", CoverUrl = CoverById(12538785) },
-                        new() { Title = "A Feast for Crows", Subtitle = "A Song of Ice and Fire", CoverUrl = CoverById(6399778) },
-                    },
-                    AvailableWorks = new List<AuthorWork>
-                    {
-                        new() { Title = "A Dance with Dragons", Subtitle = "A Song of Ice and Fire", CoverUrl = CoverById(11299703) },
-                        new() { Title = "Fire & Blood", Subtitle = "Targaryen History", CoverUrl = CoverById(15110788) },
-                        new() { Title = "The Hedge Knight", Subtitle = "Tales of Dunk and Egg", CoverUrl = CoverById(15125419) },
-                        new() { Title = "The Sworn Sword", Subtitle = "Tales of Dunk and Egg", CoverUrl = CoverById(15125419) },
-                    }
-                },
-                new()
+                    builder.Append(character);
+                    previousWasHyphen = false;
+                }
+                else if (char.IsWhiteSpace(character) || character is '-' or '_')
                 {
-                    Slug = "isaac-asimov",
-                    Name = "Isaac Asimov",
-                    Summary = "Prolific science fiction author and futurist.",
-                    PhotoUrl = "https://i.pravatar.cc/96?img=33",
-                    WorkCount = 15,
-                    Library = new List<AuthorWork>
+                    if (!previousWasHyphen && builder.Length > 0)
                     {
-                        new() { Title = "Foundation", Subtitle = "Foundation Series", CoverUrl = CoverById(14612610) },
-                        new() { Title = "Foundation and Empire", Subtitle = "Foundation Series", CoverUrl = CoverById(9300695) },
-                        new() { Title = "Second Foundation", Subtitle = "Foundation Series", CoverUrl = CoverById(9261324) },
-                        new() { Title = "I, Robot", Subtitle = "Robot Series", CoverUrl = CoverById(12385229) },
-                    },
-                    AvailableWorks = new List<AuthorWork>
-                    {
-                        new() { Title = "The Caves of Steel", Subtitle = "Robot Series", CoverUrl = CoverById(13790511) },
-                        new() { Title = "The Naked Sun", Subtitle = "Robot Series", CoverUrl = CoverById(6542967) },
-                        new() { Title = "The Robots of Dawn", Subtitle = "Robot Series", CoverUrl = CoverById(14372309) },
-                        new() { Title = "The End of Eternity", Subtitle = "Standalone", CoverUrl = CoverById(6622699) },
-                    }
-                },
-                new()
-                {
-                    Slug = "frank-herbert",
-                    Name = "Frank Herbert",
-                    Summary = "Science fiction visionary best known for Dune.",
-                    PhotoUrl = "https://i.pravatar.cc/96?img=29",
-                    WorkCount = 10,
-                    Library = new List<AuthorWork>
-                    {
-                        new() { Title = "Dune", Subtitle = "The Atreides Saga", CoverUrl = CoverById(11481354) },
-                        new() { Title = "Dune Messiah", Subtitle = "The Atreides Saga", CoverUrl = CoverById(2421405) },
-                        new() { Title = "Children of Dune", Subtitle = "The Atreides Saga", CoverUrl = CoverById(6976407) },
-                        new() { Title = "God Emperor of Dune", Subtitle = "The Atreides Saga", CoverUrl = CoverById(6711531) },
-                    },
-                    AvailableWorks = new List<AuthorWork>
-                    {
-                        new() { Title = "Heretics of Dune", Subtitle = "The Atreides Saga", CoverUrl = CoverById(284530) },
-                        new() { Title = "Chapterhouse: Dune", Subtitle = "The Atreides Saga", CoverUrl = CoverById(5536140) },
-                        new() { Title = "Dune: House Atreides", Subtitle = "Prelude", CoverUrl = CoverById(372913) },
-                        new() { Title = "Destination: Void", Subtitle = "Standalone", CoverUrl = CoverById(10292985) },
-                    }
-                },
-                new()
-                {
-                    Slug = "ursula-le-guin",
-                    Name = "Ursula K. Le Guin",
-                    Summary = "Award-winning author exploring society, gender, and imagination.",
-                    PhotoUrl = "https://i.pravatar.cc/96?img=15",
-                    WorkCount = 7,
-                    Library = new List<AuthorWork>
-                    {
-                        new() { Title = "A Wizard of Earthsea", Subtitle = "Earthsea Cycle", CoverUrl = CoverById(13617691) },
-                        new() { Title = "The Tombs of Atuan", Subtitle = "Earthsea Cycle", CoverUrl = CoverById(6633403) },
-                        new() { Title = "The Farthest Shore", Subtitle = "Earthsea Cycle", CoverUrl = CoverById(6498990) },
-                        new() { Title = "Tehanu", Subtitle = "Earthsea Cycle", CoverUrl = CoverById(3347790) },
-                    },
-                    AvailableWorks = new List<AuthorWork>
-                    {
-                        new() { Title = "The Left Hand of Darkness", Subtitle = "Hainish Cycle", CoverUrl = CoverById(10618463) },
-                        new() { Title = "The Dispossessed", Subtitle = "Hainish Cycle", CoverUrl = CoverById(6979680) },
-                        new() { Title = "Tales from Earthsea", Subtitle = "Earthsea Cycle", CoverUrl = CoverById(4636848) },
-                        new() { Title = "The Lathe of Heaven", Subtitle = "Speculative", CoverUrl = CoverById(26458) },
-                    }
-                },
-                new()
-                {
-                    Slug = "philip-k-dick",
-                    Name = "Philip K. Dick",
-                    Summary = "Speculative fiction pioneer questioning reality and identity.",
-                    PhotoUrl = "https://i.pravatar.cc/96?img=7",
-                    WorkCount = 11,
-                    Library = new List<AuthorWork>
-                    {
-                        new() { Title = "Do Androids Dream of Electric Sheep?", Subtitle = "Standalone", CoverUrl = CoverById(207515) },
-                        new() { Title = "The Man in the High Castle", Subtitle = "Standalone", CoverUrl = CoverById(420452) },
-                        new() { Title = "Ubik", Subtitle = "Standalone", CoverUrl = CoverById(5018327) },
-                        new() { Title = "A Scanner Darkly", Subtitle = "Standalone", CoverUrl = CoverById(911131) },
-                    },
-                    AvailableWorks = new List<AuthorWork>
-                    {
-                        new() { Title = "Flow My Tears, the Policeman Said", Subtitle = "Standalone", CoverUrl = CoverById(9251771) },
-                        new() { Title = "VALIS", Subtitle = "VALIS Trilogy", CoverUrl = CoverById(9251944) },
-                        new() { Title = "The Three Stigmata of Palmer Eldritch", Subtitle = "Standalone", CoverUrl = CoverById(4910773) },
-                        new() { Title = "Minority Report", Subtitle = "Short Fiction", CoverUrl = CoverById(499534) },
+                        builder.Append('-');
+                        previousWasHyphen = true;
                     }
                 }
-            };
+            }
+
+            var slug = builder.ToString().Trim('-');
+            return string.IsNullOrWhiteSpace(slug) ? "author" : slug;
         }
 
         private static (QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteCard> Quotes) BuildQuotes()
@@ -294,7 +389,6 @@ namespace BookWise.Web.Pages
             return (authors, series, adaptations);
         }
 
-        private static string CoverById(int coverId) => $"https://covers.openlibrary.org/b/id/{coverId}-L.jpg";
 
         public class AuthorProfile
         {
@@ -303,8 +397,8 @@ namespace BookWise.Web.Pages
             public string Summary { get; init; } = string.Empty;
             public string PhotoUrl { get; init; } = string.Empty;
             public int WorkCount { get; init; }
-            public IReadOnlyList<AuthorWork> Library { get; init; } = new List<AuthorWork>();
-            public IReadOnlyList<AuthorWork> AvailableWorks { get; init; } = new List<AuthorWork>();
+            public IReadOnlyList<AuthorWork> Library { get; init; } = Array.Empty<AuthorWork>();
+            public IReadOnlyList<AuthorWork> AvailableWorks { get; init; } = Array.Empty<AuthorWork>();
         }
 
         public class AuthorWork

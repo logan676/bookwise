@@ -183,6 +183,23 @@
         let selectedBook = null;
         let selectedStatus = readingStatusOptions[0]?.value ?? 'plan-to-read';
 
+        const sanitizeOptionalText = (value, maxLength) => {
+            if (typeof value !== 'string') {
+                return null;
+            }
+
+            const trimmed = value.trim();
+            if (!trimmed) {
+                return null;
+            }
+
+            if (typeof maxLength === 'number' && trimmed.length > maxLength) {
+                return trimmed.slice(0, maxLength);
+            }
+
+            return trimmed;
+        };
+
         initializeStatusOptions();
 
         startSearchingBtn?.addEventListener('click', () => {
@@ -522,16 +539,8 @@
                 .toString()
                 .trim()
                 .toLowerCase();
-            const title = (book.title ?? '').trim();
-            const author = (book.author ?? '').trim();
-            const sanitize = (value) => {
-                if (typeof value !== 'string') {
-                    return null;
-                }
-
-                const trimmed = value.trim();
-                return trimmed.length > 0 ? trimmed : null;
-            };
+            const title = sanitizeOptionalText(book.title, 200) ?? '';
+            const author = sanitizeOptionalText(book.author, 200) ?? '';
 
             const resolvedRating = (() => {
                 if (typeof extras.rating === 'number' && Number.isFinite(extras.rating)) {
@@ -552,11 +561,11 @@
             const payload = {
                 title,
                 author,
-                description: sanitize(book.description),
-                quote: sanitize(book.quote),
-                coverImageUrl: sanitize(book.coverImageUrl),
-                category: sanitize(book.category),
-                isbn: sanitize(book.isbn),
+                description: sanitizeOptionalText(book.description, 2000),
+                quote: sanitizeOptionalText(book.quote, 500),
+                coverImageUrl: sanitizeOptionalText(book.coverImageUrl, 500),
+                category: sanitizeOptionalText(book.category, 100),
+                isbn: sanitizeOptionalText(book.isbn, 20),
                 status: normalizedStatus,
                 isFavorite: false,
                 rating: normalizedRating
@@ -606,10 +615,11 @@
                 return null;
             }
 
-            const title = remarkTitleInput?.value.trim();
+            const title = sanitizeOptionalText(remarkTitleInput?.value, 200);
+            const limitedContent = content.length > 4000 ? content.slice(0, 4000) : content;
             return {
-                title: title ? title : null,
-                content
+                title,
+                content: limitedContent
             };
         }
 
@@ -641,7 +651,7 @@
             emptyState.style.display = 'none';
             searchResults.style.display = 'block';
             resultsList.innerHTML = '';
-            setFeedback(isAuthorSearch ? 'Searching for books by author...' : 'Searching for books...');
+            setFeedback(isAuthorSearch ? 'Searching for authors...' : 'Searching for books...');
 
             try {
                 logActivity('Search submitted', {
@@ -693,11 +703,7 @@
                         details: { query, searchBy },
                         variant: 'warning'
                     });
-                    setFeedback(
-                        isAuthorSearch
-                            ? 'No books found for that author. Try a different name.'
-                            : 'No matching books found. Try a different keyword.',
-                        'error');
+                    setFeedback('No matching books found. Try another title or author name.', 'error');
                     return;
                 }
 
@@ -764,48 +770,54 @@
                 const author = escapeHtml(rawAuthor);
                 const metaParts = [];
 
-                if (book.published) {
-                    metaParts.push(`Published: ${escapeHtml(book.published)}`);
+                const safePublished = sanitizeOptionalText(book.published, 120);
+                const safeLanguage = sanitizeOptionalText(book.language, 60);
+                const safeDescription = sanitizeOptionalText(book.description, 2000);
+                const safeQuote = sanitizeOptionalText(book.quote, 500);
+                const safeCategory = sanitizeOptionalText(book.category, 100);
+                const safeIsbn = sanitizeOptionalText(book.isbn, 20);
+                const safeCover = sanitizeOptionalText(book.coverImageUrl, 500);
+
+                if (safePublished) {
+                    metaParts.push(`Published: ${escapeHtml(safePublished)}`);
                 }
 
-                if (book.language) {
-                    metaParts.push(`Language: ${escapeHtml(book.language)}`);
+                if (safeLanguage) {
+                    metaParts.push(`Language: ${escapeHtml(safeLanguage)}`);
                 }
 
                 if (typeof book.rating === 'number' && Number.isFinite(book.rating)) {
                     metaParts.push(`Rating: ${escapeHtml(book.rating.toFixed(1))}/5`);
                 }
 
-                if (book.category) {
-                    metaParts.push(`Category: ${escapeHtml(book.category)}`);
+                if (safeCategory) {
+                    metaParts.push(`Category: ${escapeHtml(safeCategory)}`);
                 }
 
-                if (book.isbn) {
-                    metaParts.push(`ISBN: ${escapeHtml(book.isbn)}`);
+                if (safeIsbn) {
+                    metaParts.push(`ISBN: ${escapeHtml(safeIsbn)}`);
                 }
 
                 const metadata = metaParts.length > 0
                     ? `<p class="book-details">${metaParts.join(' | ')}</p>`
                     : '';
 
-                const description = book.description
-                    ? `<p class="book-details">${escapeHtml(book.description)}</p>`
+                const description = safeDescription
+                    ? `<p class="book-details">${escapeHtml(safeDescription)}</p>`
                     : '';
 
-                const quote = book.quote
-                    ? `<p class="book-details book-quote">“${escapeHtml(book.quote)}”</p>`
+                const quote = safeQuote
+                    ? `<p class="book-details book-quote">“${escapeHtml(safeQuote)}”</p>`
                     : '';
 
-                const cover = book.coverImageUrl
-                    ? escapeAttribute(book.coverImageUrl)
-                    : '';
+                const cover = safeCover ? escapeAttribute(safeCover) : '';
 
-                const coverData = escapeAttribute(book.coverImageUrl ?? '');
+                const coverData = escapeAttribute(safeCover ?? '');
                 const initialCover = cover || placeholderCover;
-                const descriptionData = escapeAttribute(book.description ?? '');
-                const categoryData = escapeAttribute(book.category ?? '');
-                const quoteData = escapeAttribute(book.quote ?? '');
-                const isbnData = escapeAttribute(book.isbn ?? '');
+                const descriptionData = escapeAttribute(safeDescription ?? '');
+                const categoryData = escapeAttribute(safeCategory ?? '');
+                const quoteData = escapeAttribute(safeQuote ?? '');
+                const isbnData = escapeAttribute(safeIsbn ?? '');
                 const ratingData = (typeof book.rating === 'number' && Number.isFinite(book.rating))
                     ? escapeAttribute(book.rating.toFixed(1))
                     : '';

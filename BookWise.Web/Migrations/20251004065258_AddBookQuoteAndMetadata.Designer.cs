@@ -3,6 +3,7 @@ using System;
 using BookWise.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BookWise.Web.Migrations
 {
     [DbContext(typeof(BookWiseContext))]
-    partial class BookWiseContextModelSnapshot : ModelSnapshot
+    [Migration("20251004065258_AddBookQuoteAndMetadata")]
+    partial class AddBookQuoteAndMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -108,47 +111,6 @@ namespace BookWise.Web.Migrations
                     b.HasIndex("BookId", "Type", "AddedOn");
 
                     b.ToTable("BookRemarks");
-                });
-
-            modelBuilder.Entity("BookWise.Web.Models.AuthorRecommendation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal?>("ConfidenceScore")
-                        .HasPrecision(3, 2)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FocusAuthor")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("GeneratedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-                    b.Property<string>("ImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RecommendedAuthor")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Rationale")
-                        .HasMaxLength(1000)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FocusAuthor", "RecommendedAuthor")
-                        .IsUnique();
-
-                    b.ToTable("AuthorRecommendations");
                 });
 
             modelBuilder.Entity("BookWise.Web.Models.BookRemark", b =>

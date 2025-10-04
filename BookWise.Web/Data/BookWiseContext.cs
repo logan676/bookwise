@@ -7,6 +7,7 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
 {
     public DbSet<Book> Books => Set<Book>();
     public DbSet<BookRemark> BookRemarks => Set<BookRemark>();
+    public DbSet<AuthorRecommendation> AuthorRecommendations => Set<AuthorRecommendation>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -52,6 +53,31 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
                 .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(r => new { r.BookId, r.Type, r.AddedOn });
+        });
+
+        modelBuilder.Entity<AuthorRecommendation>(entity =>
+        {
+            entity.Property(r => r.FocusAuthor)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(r => r.RecommendedAuthor)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(r => r.Rationale)
+                .HasMaxLength(1000);
+
+            entity.Property(r => r.ImageUrl)
+                .HasMaxLength(500);
+
+            entity.Property(r => r.ConfidenceScore)
+                .HasPrecision(3, 2);
+
+            entity.Property(r => r.GeneratedAt)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            entity.HasIndex(r => new { r.FocusAuthor, r.RecommendedAuthor }).IsUnique();
         });
     }
 }
