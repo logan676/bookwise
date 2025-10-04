@@ -78,6 +78,8 @@ BookWise.Web/
 
 All endpoints return standard HTTP status codes. Validation failures emit RFC 7807 problem responses, including member-specific error messages.
 
+`CreateBookRequest` and `UpdateBookRequest` both require `status` to be one of `plan-to-read`, `reading`, or `read` in addition to `title` and `author`.
+
 ## Data Model & Persistence
 - Database file lives at `BookWise.Web/Data/bookwise.db` (ignored by Git).
 - `Book` fields cover descriptive metadata, read status (`plan-to-read`, `reading`, `read`), `IsFavorite`, rating, and timestamps.

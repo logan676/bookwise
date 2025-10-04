@@ -79,6 +79,29 @@
     </div>
 </div>
 
+<div class="status-modal-backdrop" id="status-modal" hidden>
+    <div class="status-modal-panel" role="dialog" aria-modal="true" aria-labelledby="status-modal-title" aria-describedby="status-modal-description" tabindex="-1">
+        <button type="button" class="status-modal-close" id="status-modal-close" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+        <header class="status-modal-header">
+            <p class="status-modal-eyebrow" id="status-modal-description">Choose how you want to track this title.</p>
+            <h2 class="status-modal-title" id="status-modal-title">Add to your library</h2>
+            <p class="status-modal-book" id="status-modal-book"></p>
+        </header>
+        <div class="status-modal-options" id="reading-status-options"></div>
+        <footer class="status-modal-footer">
+            <span class="status-modal-feedback" id="status-modal-feedback" role="alert"></span>
+            <button type="button" class="status-modal-submit" id="confirm-add-book">
+                Add to Library
+            </button>
+        </footer>
+    </div>
+</div>
+
 @section Scripts {
     <script>
         // Search functionality
@@ -93,6 +116,36 @@
         const activityLogEmpty = document.getElementById('activity-log-empty');
         const clearLogButton = document.getElementById('clear-log');
         const placeholderCover = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="60" height="90"><rect width="100%" height="100%" fill="#e2e8f0"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" fill="#64748b">No Cover</text></svg>');
+        const statusModal = document.getElementById('status-modal');
+        const statusModalPanel = document.querySelector('.status-modal-panel');
+        const statusModalClose = document.getElementById('status-modal-close');
+        const statusOptionsContainer = document.getElementById('reading-status-options');
+        const statusModalBook = document.getElementById('status-modal-book');
+        const statusModalFeedback = document.getElementById('status-modal-feedback');
+        const confirmAddButton = document.getElementById('confirm-add-book');
+
+        const readingStatusOptions = [
+            {
+                value: 'plan-to-read',
+                label: 'Save for Later',
+                helper: 'Queue this title for when you have time to enjoy it.'
+            },
+            {
+                value: 'reading',
+                label: 'Currently Reading',
+                helper: 'Start tracking it right away while you dive in.'
+            },
+            {
+                value: 'read',
+                label: 'Finished',
+                helper: 'Log it as completed and celebrate the win.'
+            }
+        ];
+
+        let selectedBook = null;
+        let selectedStatus = readingStatusOptions[0]?.value ?? 'plan-to-read';
+
+        initializeStatusOptions();
 
         startSearchingBtn?.addEventListener('click', () => {
             searchInput.focus();
@@ -115,21 +168,47 @@
 
         clearLogButton?.addEventListener('click', resetActivityLog);
 
+        statusModalClose?.addEventListener('click', closeStatusModal);
+
+        statusModal?.addEventListener('click', (event) => {
+            if (event.target === statusModal) {
+                closeStatusModal();
+            }
+        });
+
+        confirmAddButton?.addEventListener('click', submitSelectedBook);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && isModalOpen()) {
+                closeStatusModal();
+            }
+        });
+
         resultsList.addEventListener('click', (event) => {
             const button = event.target.closest('.add-book-btn');
             if (!button) {
                 return;
             }
 
-            const { title, author } = button.dataset;
+            const book = extractBookData(button);
+            if (!book.title || !book.author) {
+                logActivity('Add book blocked', {
+                    details: book,
+                    variant: 'error'
+                });
+                setFeedback('Unable to add this suggestion right now. Try searching again.', 'error');
+                return;
+            }
+
             logActivity('Add book requested', {
                 details: {
-                    title,
-                    author
+                    title: book.title,
+                    author: book.author
                 },
                 variant: 'info'
             });
-            addBook(title ?? '', author ?? '');
+
+            openStatusModal(book);
         });
 
         function showEmptyState() {
@@ -158,6 +237,232 @@
             searchFeedback.className = classes.join(' ');
             searchFeedback.textContent = message;
             searchFeedback.style.display = 'block';
+        }
+
+        function initializeStatusOptions() {
+            if (!statusOptionsContainer) {
+                return;
+            }
+
+            statusOptionsContainer.innerHTML = readingStatusOptions.map((option, index) => `
+                <label class="status-option">
+                    <input type="radio" name="reading-status" value="${option.value}" ${index === 0 ? 'checked' : ''}>
+                    <span class="status-option-content">
+                        <span class="status-option-label">${option.label}</span>
+                        <span class="status-option-helper">${option.helper}</span>
+                    </span>
+                </label>
+            `).join('');
+
+            statusOptionsContainer.addEventListener('change', (event) => {
+                const input = event.target;
+                if (input instanceof HTMLInputElement && input.name === 'reading-status') {
+                    selectedStatus = input.value;
+                    clearModalFeedback();
+                }
+            });
+        }
+
+        function extractBookData(button) {
+            const {
+                title = '',
+                author = '',
+                description = '',
+                cover = '',
+                category = ''
+            } = button.dataset;
+
+            return {
+                title: title.trim(),
+                author: author.trim(),
+                description: description.trim(),
+                coverImageUrl: cover.trim(),
+                category: category.trim()
+            };
+        }
+
+        function openStatusModal(book) {
+            if (!statusModal) {
+                return;
+            }
+
+            selectedBook = book;
+            selectedStatus = readingStatusOptions[0]?.value ?? 'plan-to-read';
+
+            clearModalFeedback();
+
+            if (statusModalBook) {
+                statusModalBook.textContent = `${book.title} · ${book.author}`;
+            }
+
+            const radios = statusOptionsContainer?.querySelectorAll('input[name="reading-status"]');
+            radios?.forEach((input, index) => {
+                input.checked = index === 0;
+            });
+
+            document.body.classList.add('modal-open');
+            statusModal.removeAttribute('hidden');
+            statusModal.classList.add('is-open');
+
+            queueMicrotask(() => {
+                const focusTarget = statusOptionsContainer?.querySelector('input[name="reading-status"]');
+                if (focusTarget instanceof HTMLElement) {
+                    focusTarget.focus();
+                } else if (statusModalPanel instanceof HTMLElement) {
+                    statusModalPanel.focus();
+                }
+            });
+        }
+
+        function closeStatusModal() {
+            if (!statusModal) {
+                return;
+            }
+
+            statusModal.classList.remove('is-open');
+            statusModal.setAttribute('hidden', 'hidden');
+            document.body.classList.remove('modal-open');
+            selectedBook = null;
+        }
+
+        function isModalOpen() {
+            return statusModal?.classList.contains('is-open') ?? false;
+        }
+
+        function clearModalFeedback() {
+            if (!statusModalFeedback) {
+                return;
+            }
+
+            statusModalFeedback.textContent = '';
+            statusModalFeedback.className = 'status-modal-feedback';
+        }
+
+        function setModalFeedback(message, state) {
+            if (!statusModalFeedback) {
+                return;
+            }
+
+            const classes = ['status-modal-feedback'];
+            if (state) {
+                classes.push(`status-modal-feedback--${state}`);
+            }
+
+            statusModalFeedback.className = classes.join(' ');
+            statusModalFeedback.textContent = message;
+        }
+
+        async function submitSelectedBook() {
+            if (!confirmAddButton) {
+                return;
+            }
+
+            if (!selectedBook) {
+                setModalFeedback('Select a book before adding it to your library.', 'error');
+                return;
+            }
+
+            const payload = buildBookPayload(selectedBook, selectedStatus);
+
+            if (!payload.title || !payload.author) {
+                setModalFeedback('We need a title and author to add this book.', 'error');
+                return;
+            }
+
+            logActivity('Saving book to library', {
+                details: {
+                    title: payload.title,
+                    author: payload.author,
+                    status: payload.status
+                },
+                variant: 'info'
+            });
+
+            confirmAddButton.disabled = true;
+            confirmAddButton.textContent = 'Adding…';
+
+            try {
+                const response = await fetch('/api/books', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    let message = 'We could not add this book right now. Please try again.';
+                    try {
+                        const errorBody = await response.json();
+                        message = errorBody?.detail
+                            ?? errorBody?.title
+                            ?? errorBody?.message
+                            ?? message;
+                    } catch {
+                        message = `${message} (status ${response.status})`;
+                    }
+
+                    logActivity('Book creation failed', {
+                        details: {
+                            status: response.status,
+                            statusText: response.statusText,
+                            message
+                        },
+                        variant: 'error'
+                    });
+
+                    setModalFeedback(message, 'error');
+                    return;
+                }
+
+                const created = await response.json();
+
+                logActivity('Book saved to library', {
+                    details: {
+                        id: created?.id,
+                        status: payload.status
+                    },
+                    variant: 'success'
+                });
+
+                closeStatusModal();
+                logActivity('Redirecting to library', { variant: 'info' });
+                window.location.href = '/';
+            } catch (error) {
+                const message = error instanceof Error
+                    ? error.message
+                    : 'Something went wrong while saving. Please try again.';
+
+                logActivity('Book creation failed', {
+                    details: message,
+                    variant: 'error'
+                });
+
+                setModalFeedback(message, 'error');
+            } finally {
+                confirmAddButton.disabled = false;
+                confirmAddButton.textContent = 'Add to Library';
+            }
+        }
+
+        function buildBookPayload(book, status) {
+            const normalizedStatus = (status ?? readingStatusOptions[0]?.value ?? 'plan-to-read')
+                .toString()
+                .trim()
+                .toLowerCase();
+            const title = (book.title ?? '').trim();
+            const author = (book.author ?? '').trim();
+
+            return {
+                title,
+                author,
+                description: book.description ? book.description.trim() : null,
+                coverImageUrl: book.coverImageUrl ? book.coverImageUrl.trim() : null,
+                category: book.category ? book.category.trim() : null,
+                status: normalizedStatus,
+                isFavorite: false,
+                rating: null
+            };
         }
 
         async function handleSearch() {
@@ -277,8 +582,10 @@
 
         function renderResults(results) {
             const html = results.map((book) => {
-                const title = escapeHtml(book.title ?? 'Untitled');
-                const author = escapeHtml(book.author ?? 'Unknown author');
+                const rawTitle = book.title ?? 'Untitled';
+                const rawAuthor = book.author ?? 'Unknown author';
+                const title = escapeHtml(rawTitle);
+                const author = escapeHtml(rawAuthor);
                 const metaParts = [];
 
                 if (book.published) {
@@ -301,6 +608,10 @@
                     ? escapeAttribute(book.coverImageUrl)
                     : placeholderCover;
 
+                const coverData = escapeAttribute(book.coverImageUrl ?? '');
+                const descriptionData = escapeAttribute(book.description ?? '');
+                const categoryData = escapeAttribute(book.category ?? '');
+
                 return `
                     <div class="search-result-item">
                         <div class="book-cover">
@@ -312,7 +623,12 @@
                             ${metadata}
                             ${description}
                         </div>
-                        <button class="add-book-btn" data-title="${escapeAttribute(book.title ?? '')}" data-author="${escapeAttribute(book.author ?? '')}">
+                        <button class="add-book-btn"
+                            data-title="${escapeAttribute(rawTitle)}"
+                            data-author="${escapeAttribute(rawAuthor)}"
+                            data-description="${descriptionData}"
+                            data-cover="${coverData}"
+                            data-category="${categoryData}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -351,14 +667,6 @@
 
         function escapeAttribute(value) {
             return escapeHtml(value ?? '');
-        }
-
-        function addBook(title, author) {
-            alert(`Added "${title}" by ${author} to your library!`);
-            logActivity('Redirecting to library', {
-                variant: 'info'
-            });
-            window.location.href = '/';
         }
 
         function logActivity(message, options = {}) {

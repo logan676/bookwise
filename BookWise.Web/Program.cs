@@ -394,6 +394,7 @@ record CreateBookRequest(
     [property: MaxLength(2000)] string? Description,
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
+    [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
     [property: Range(0, 5)] decimal? Rating
 )
@@ -405,9 +406,12 @@ record CreateBookRequest(
         Description = Description?.Trim(),
         CoverImageUrl = CoverImageUrl?.Trim(),
         Category = Category?.Trim(),
+        Status = NormalizeStatus(Status),
         IsFavorite = IsFavorite,
         Rating = Rating
     };
+
+    private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();
 }
 
 record UpdateBookRequest(
@@ -416,6 +420,7 @@ record UpdateBookRequest(
     [property: MaxLength(2000)] string? Description,
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
+    [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
     [property: Range(0, 5)] decimal? Rating
 )
@@ -427,9 +432,12 @@ record UpdateBookRequest(
         book.Description = Description?.Trim();
         book.CoverImageUrl = CoverImageUrl?.Trim();
         book.Category = Category?.Trim();
+        book.Status = NormalizeStatus(Status);
         book.IsFavorite = IsFavorite;
         book.Rating = Rating;
     }
+
+    private static string NormalizeStatus(string status) => status.Trim().ToLowerInvariant();
 }
 
 record BookSearchRequest(string Query);
