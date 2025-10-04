@@ -128,7 +128,8 @@
 :root[data-theme="dark"] .search-bar,
 :root[data-theme="dark"] .book-card,
 :root[data-theme="dark"] .results-actions,
-:root[data-theme="dark"] .settings-menu-panel {
+:root[data-theme="dark"] .settings-menu-panel,
+:root[data-theme="dark"] .book-section--with-background {
   background: var(--surface);
 }
 
@@ -1026,6 +1027,17 @@ a:hover {
 
 .book-section {
   margin-bottom: 3rem;
+}
+
+.book-section--with-background {
+  background: var(--surface);
+  border-radius: 22px;
+  padding: 1.75rem;
+  box-shadow: 0 24px 40px rgba(15, 23, 42, 0.08);
+}
+
+.book-section--with-background + .book-section--with-background {
+  margin-top: 2.75rem;
 }
 
 .section-header {
