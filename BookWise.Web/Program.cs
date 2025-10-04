@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -113,8 +114,17 @@ app.MapRazorPages();
 
 var books = app.MapGroup("/api/books");
 
-books.MapGet("", async ([AsParameters] BookQuery query, BookWiseContext db) =>
+books.MapGet("", async ([AsParameters] BookQuery query, BookWiseContext db, ILogger<Program> logger) =>
 {
+    var operationId = Guid.NewGuid();
+    var timer = Stopwatch.StartNew();
+    logger.LogInformation(
+        "[{OperationId}] Listing books with parameters: search='{Search}', onlyFavorites={OnlyFavorites}, category='{Category}'",
+        operationId,
+        query.Search,
+        query.OnlyFavorites,
+        query.Category);
+
     var booksQuery = db.Books.AsNoTracking();
 
     if (!string.IsNullOrWhiteSpace(query.Search))
@@ -141,20 +151,56 @@ books.MapGet("", async ([AsParameters] BookQuery query, BookWiseContext db) =>
         .Take(25)
         .ToListAsync();
 
+    timer.Stop();
+    logger.LogInformation(
+        "[{OperationId}] Completed list request with {Count} results in {Elapsed} ms",
+        operationId,
+        results.Count,
+        timer.ElapsedMilliseconds);
     return Results.Ok(results);
 });
 
-books.MapGet("/{id:int}", async (int id, BookWiseContext db) =>
+books.MapGet("/{id:int}", async (int id, BookWiseContext db, ILogger<Program> logger) =>
 {
+    var operationId = Guid.NewGuid();
+    var timer = Stopwatch.StartNew();
+    logger.LogInformation("[{OperationId}] Fetching book {Id}", operationId, id);
     var book = await db.Books.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id);
-    return book is null ? Results.NotFound() : Results.Ok(book);
+    if (book is null)
+    {
+        logger.LogWarning("[{OperationId}] Book {Id} not found", operationId, id);
+        return Results.NotFound();
+    }
+
+    timer.Stop();
+    logger.LogInformation(
+        "[{OperationId}] Returning book {Id} (title='{Title}', author='{Author}') in {Elapsed} ms",
+        operationId,
+        id,
+        book.Title,
+        book.Author,
+        timer.ElapsedMilliseconds);
+    return Results.Ok(book);
 });
 
-books.MapPost("", async (CreateBookRequest request, BookWiseContext db) =>
+books.MapPost("", async (CreateBookRequest request, BookWiseContext db, ILogger<Program> logger) =>
 {
+    var operationId = Guid.NewGuid();
+    var timer = Stopwatch.StartNew();
+    logger.LogInformation(
+        "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', rating={Rating}, favorite={Favorite}",
+        operationId,
+        request.Title,
+        request.Author,
+        request.Status,
+        request.Category,
+        request.Rating,
+        request.IsFavorite);
+
     var validationResults = new List<ValidationResult>();
     if (!Validator.TryValidateObject(request, new ValidationContext(request), validationResults, true))
     {
+        logger.LogWarning("[{OperationId}] Create validation failed with {Count} errors", operationId, validationResults.Count);
         return Results.ValidationProblem(validationResults
             .GroupBy(r => r.MemberNames.FirstOrDefault() ?? string.Empty)
             .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
@@ -164,14 +210,34 @@ books.MapPost("", async (CreateBookRequest request, BookWiseContext db) =>
     await db.Books.AddAsync(entity);
     await db.SaveChangesAsync();
 
+    timer.Stop();
+    logger.LogInformation(
+        "[{OperationId}] Created book with id {Id} in {Elapsed} ms",
+        operationId,
+        entity.Id,
+        timer.ElapsedMilliseconds);
     return Results.Created($"/api/books/{entity.Id}", entity);
 });
 
-books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseContext db) =>
+books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseContext db, ILogger<Program> logger) =>
 {
+    var operationId = Guid.NewGuid();
+    var timer = Stopwatch.StartNew();
+    logger.LogInformation(
+        "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', rating={Rating}, favorite={Favorite}",
+        operationId,
+        id,
+        request.Title,
+        request.Author,
+        request.Status,
+        request.Category,
+        request.Rating,
+        request.IsFavorite);
+
     var validationResults = new List<ValidationResult>();
     if (!Validator.TryValidateObject(request, new ValidationContext(request), validationResults, true))
     {
+        logger.LogWarning("[{OperationId}] Update validation failed for book {Id} with {Count} errors", operationId, id, validationResults.Count);
         return Results.ValidationProblem(validationResults
             .GroupBy(r => r.MemberNames.FirstOrDefault() ?? string.Empty)
             .ToDictionary(g => g.Key, g => g.Select(r => r.ErrorMessage ?? string.Empty).ToArray()));
@@ -180,26 +246,46 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
     var book = await db.Books.FindAsync(id);
     if (book is null)
     {
+        logger.LogWarning("[{OperationId}] Book {Id} not found for update", operationId, id);
         return Results.NotFound();
     }
 
     request.Apply(book);
     await db.SaveChangesAsync();
 
+    timer.Stop();
+    logger.LogInformation(
+        "[{OperationId}] Updated book {Id} (title='{Title}', status='{Status}') in {Elapsed} ms",
+        operationId,
+        id,
+        book.Title,
+        book.Status,
+        timer.ElapsedMilliseconds);
     return Results.Ok(book);
 });
 
-books.MapDelete("/{id:int}", async (int id, BookWiseContext db) =>
+books.MapDelete("/{id:int}", async (int id, BookWiseContext db, ILogger<Program> logger) =>
 {
+    var operationId = Guid.NewGuid();
+    var timer = Stopwatch.StartNew();
+    logger.LogInformation("[{OperationId}] Deleting book {Id}", operationId, id);
     var book = await db.Books.FindAsync(id);
     if (book is null)
     {
+        logger.LogWarning("[{OperationId}] Book {Id} not found for delete", operationId, id);
         return Results.NotFound();
     }
 
     db.Books.Remove(book);
     await db.SaveChangesAsync();
 
+    timer.Stop();
+    logger.LogInformation(
+        "[{OperationId}] Deleted book {Id} (title='{Title}') in {Elapsed} ms",
+        operationId,
+        id,
+        book.Title,
+        timer.ElapsedMilliseconds);
     return Results.NoContent();
 });
 
@@ -207,6 +293,7 @@ app.MapPost("/api/book-search", async Task<IResult> (
     [FromBody] BookSearchRequest request,
     IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     static string? ExtractJsonObject(string value)
@@ -246,8 +333,13 @@ app.MapPost("/api/book-search", async Task<IResult> (
         return string.IsNullOrWhiteSpace(jsonCandidate) ? null : jsonCandidate;
     }
 
+    var operationId = Guid.NewGuid();
+    var searchTimer = Stopwatch.StartNew();
+    logger.LogInformation("[{OperationId}] Incoming book search request for query '{Query}'", operationId, request.Query);
+
     if (string.IsNullOrWhiteSpace(request.Query))
     {
+        logger.LogWarning("[{OperationId}] Search rejected because query was empty", operationId);
         return Results.BadRequest(new { message = "Query is required." });
     }
 
@@ -289,12 +381,14 @@ app.MapPost("/api/book-search", async Task<IResult> (
 
     try
     {
+        logger.LogDebug("[{OperationId}] Submitting request to DeepSeek", operationId);
         using var httpContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
         var response = await httpClient.PostAsync("chat/completions", httpContent);
 
         if (!response.IsSuccessStatusCode)
         {
             var details = await response.Content.ReadAsStringAsync();
+            logger.LogError("[{OperationId}] DeepSeek request failed with status {StatusCode}: {Details}", operationId, (int)response.StatusCode, details);
             return Results.Problem($"DeepSeek request failed: {details}", statusCode: (int)response.StatusCode);
         }
 
@@ -303,6 +397,7 @@ app.MapPost("/api/book-search", async Task<IResult> (
         if (!document.RootElement.TryGetProperty("choices", out var choicesElement) ||
             choicesElement.ValueKind != JsonValueKind.Array || choicesElement.GetArrayLength() == 0)
         {
+            logger.LogError("[{OperationId}] DeepSeek response missing choices array", operationId);
             return Results.Problem("DeepSeek response did not include any choices.", statusCode: StatusCodes.Status502BadGateway);
         }
 
@@ -347,12 +442,14 @@ app.MapPost("/api/book-search", async Task<IResult> (
 
         if (string.IsNullOrWhiteSpace(content))
         {
+            logger.LogError("[{OperationId}] DeepSeek response content empty", operationId);
             return Results.Problem("DeepSeek response was empty.", statusCode: StatusCodes.Status502BadGateway);
         }
 
         var booksJson = ExtractJsonObject(content);
         if (string.IsNullOrWhiteSpace(booksJson))
         {
+            logger.LogError("[{OperationId}] Failed to extract JSON object from DeepSeek response", operationId);
             return Results.Problem("DeepSeek response did not contain valid JSON output.", statusCode: StatusCodes.Status502BadGateway);
         }
 
@@ -363,33 +460,46 @@ app.MapPost("/api/book-search", async Task<IResult> (
         }
         catch (JsonException ex)
         {
+            logger.LogError(ex, "[{OperationId}] DeepSeek returned invalid JSON", operationId);
             return Results.Problem($"DeepSeek returned invalid JSON: {ex.Message}", statusCode: StatusCodes.Status502BadGateway);
         }
 
         if (suggestions?.Books is not { Length: >= 0 })
         {
+            logger.LogError("[{OperationId}] DeepSeek response missing books collection", operationId);
             return Results.Problem("DeepSeek response was missing the books collection.", statusCode: StatusCodes.Status502BadGateway);
         }
 
-        var enriched = await BookSearchEnrichment.EnrichCoverImagesAsync(suggestions.Books, httpClientFactory, cancellationToken);
+        logger.LogInformation("[{OperationId}] DeepSeek returned {Count} book suggestions", operationId, suggestions.Books.Length);
 
+        var enriched = await BookSearchEnrichment.EnrichCoverImagesAsync(suggestions.Books, httpClientFactory, logger, operationId, cancellationToken);
+
+        logger.LogInformation("[{OperationId}] Completed search pipeline in {Elapsed} ms", operationId, searchTimer.ElapsedMilliseconds);
         return Results.Ok(new BookSearchResponse(enriched));
     }
     catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
     {
+        logger.LogError(ex, "[{OperationId}] Search request timed out", operationId);
         return Results.Problem("Search request timed out. Please try again.", statusCode: StatusCodes.Status504GatewayTimeout);
     }
     catch (TaskCanceledException)
     {
+        logger.LogWarning("[{OperationId}] Search request was canceled", operationId);
         return Results.Problem("Search request was canceled. Please try again.", statusCode: StatusCodes.Status408RequestTimeout);
     }
     catch (HttpRequestException ex)
     {
+        logger.LogError(ex, "[{OperationId}] Network error during search", operationId);
         return Results.Problem($"Network error while searching: {ex.Message}", statusCode: StatusCodes.Status503ServiceUnavailable);
     }
     catch (Exception ex)
     {
+        logger.LogError(ex, "[{OperationId}] Unexpected error during search", operationId);
         return Results.Problem($"An error occurred while searching: {ex.Message}", statusCode: StatusCodes.Status500InternalServerError);
+    }
+    finally
+    {
+        searchTimer.Stop();
     }
 });
 
@@ -475,6 +585,8 @@ static class BookSearchEnrichment
     public static async Task<BookSuggestion[]> EnrichCoverImagesAsync(
         BookSuggestion[] books,
         IHttpClientFactory httpClientFactory,
+        ILogger logger,
+        Guid operationId,
         CancellationToken cancellationToken)
     {
         if (books.Length == 0)
@@ -490,20 +602,34 @@ static class BookSearchEnrichment
             var book = books[i];
             if (!string.IsNullOrWhiteSpace(book.CoverImageUrl))
             {
+                logger.LogDebug("[{OperationId}] Skipping cover lookup for '{Title}' – already has cover", operationId, book.Title);
                 enriched[i] = book;
                 continue;
             }
 
-            var coverUrl = await TryFetchCoverUrlAsync(client, book, cancellationToken);
-            enriched[i] = !string.IsNullOrWhiteSpace(coverUrl)
-                ? book with { CoverImageUrl = coverUrl }
-                : book;
+            logger.LogDebug("[{OperationId}] Fetching cover for '{Title}' by {Author}", operationId, book.Title, book.Author);
+            var coverUrl = await TryFetchCoverUrlAsync(client, book, logger, operationId, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(coverUrl))
+            {
+                logger.LogInformation("[{OperationId}] Found cover for '{Title}'", operationId, book.Title);
+                enriched[i] = book with { CoverImageUrl = coverUrl };
+            }
+            else
+            {
+                logger.LogWarning("[{OperationId}] No cover found for '{Title}'", operationId, book.Title);
+                enriched[i] = book;
+            }
         }
 
         return enriched;
     }
 
-    private static async Task<string?> TryFetchCoverUrlAsync(HttpClient client, BookSuggestion book, CancellationToken cancellationToken)
+    private static async Task<string?> TryFetchCoverUrlAsync(
+        HttpClient client,
+        BookSuggestion book,
+        ILogger logger,
+        Guid operationId,
+        CancellationToken cancellationToken)
     {
         var querySegments = new List<string>();
 
@@ -519,6 +645,7 @@ static class BookSearchEnrichment
 
         if (querySegments.Count == 0)
         {
+            logger.LogWarning("[{OperationId}] Skipping cover lookup because query segments were empty", operationId);
             return null;
         }
 
@@ -529,6 +656,7 @@ static class BookSearchEnrichment
             using var response = await client.GetAsync(requestUri, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
+                logger.LogWarning("[{OperationId}] Google Books returned status {StatusCode} for '{Title}'", operationId, (int)response.StatusCode, book.Title);
                 return null;
             }
 
@@ -539,6 +667,7 @@ static class BookSearchEnrichment
                 itemsElement.ValueKind != JsonValueKind.Array ||
                 itemsElement.GetArrayLength() == 0)
             {
+                logger.LogDebug("[{OperationId}] Google Books returned no items for '{Title}'", operationId, book.Title);
                 return null;
             }
 
@@ -546,12 +675,14 @@ static class BookSearchEnrichment
             if (!firstItem.TryGetProperty("volumeInfo", out var volumeInfo) ||
                 volumeInfo.ValueKind != JsonValueKind.Object)
             {
+                logger.LogDebug("[{OperationId}] Google Books response missing volumeInfo for '{Title}'", operationId, book.Title);
                 return null;
             }
 
             if (!volumeInfo.TryGetProperty("imageLinks", out var imageLinks) ||
                 imageLinks.ValueKind != JsonValueKind.Object)
             {
+                logger.LogDebug("[{OperationId}] Google Books response missing imageLinks for '{Title}'", operationId, book.Title);
                 return null;
             }
 
@@ -578,8 +709,14 @@ static class BookSearchEnrichment
             var link = ReadImageLink(imageLinks);
             return NormalizeCoverUrl(link);
         }
-        catch
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            logger.LogWarning("[{OperationId}] Cover lookup cancelled for '{Title}'", operationId, book.Title);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[{OperationId}] Failed to fetch cover for '{Title}'", operationId, book.Title);
             return null;
         }
     }
