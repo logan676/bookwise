@@ -741,7 +741,6 @@
                 const rawAuthor = book.author ?? 'Unknown author';
                 const title = escapeHtml(rawTitle);
                 const author = escapeHtml(rawAuthor);
-                const metaParts = [];
 
                 const safePublished = sanitizeOptionalText(book.published, 120);
                 const safeLanguage = sanitizeOptionalText(book.language, 60);
@@ -751,44 +750,97 @@
                 const safeIsbn = sanitizeOptionalText(book.isbn, 20);
                 const safeCover = sanitizeOptionalText(book.coverImageUrl, 500);
 
-                if (safePublished) {
-                    metaParts.push(`Published: ${escapeHtml(safePublished)}`);
-                }
-
-                if (safeLanguage) {
-                    metaParts.push(`Language: ${escapeHtml(safeLanguage)}`);
-                }
-
                 const communityRating = typeof book.rating === 'number' && Number.isFinite(book.rating)
                     ? book.rating
                     : null;
 
-                if (communityRating !== null) {
-                    metaParts.push(`Community rating: ${escapeHtml(communityRating.toFixed(1))}/5`);
+                // Build metadata badges
+                const metadataBadges = [];
+                
+                if (safeCategory) {
+                    metadataBadges.push(`
+                        <span class="book-badge book-badge--category">
+                            <svg class="book-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M4 7V4a1 1 0 0 1 1-1h4.586a1 1 0 0 1 .707.293L12 5h7a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/>
+                                <path d="M4 7v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8"/>
+                            </svg>
+                            ${escapeHtml(safeCategory)}
+                        </span>
+                    `);
                 }
 
-                if (safeCategory) {
-                    metaParts.push(`Category: ${escapeHtml(safeCategory)}`);
+                if (safePublished) {
+                    metadataBadges.push(`
+                        <span class="book-badge book-badge--year">
+                            <svg class="book-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                                <line x1="16" y1="2" x2="16" y2="6"/>
+                                <line x1="8" y1="2" x2="8" y2="6"/>
+                                <line x1="3" y1="10" x2="21" y2="10"/>
+                            </svg>
+                            ${escapeHtml(safePublished)}
+                        </span>
+                    `);
+                }
+
+                if (safeLanguage) {
+                    metadataBadges.push(`
+                        <span class="book-badge book-badge--language">
+                            <svg class="book-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="2" y1="12" x2="22" y2="12"/>
+                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                            </svg>
+                            ${escapeHtml(safeLanguage)}
+                        </span>
+                    `);
                 }
 
                 if (safeIsbn) {
-                    metaParts.push(`ISBN: ${escapeHtml(safeIsbn)}`);
+                    metadataBadges.push(`
+                        <span class="book-badge book-badge--isbn">
+                            <svg class="book-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14,2 14,8 20,8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                                <polyline points="10,9 9,9 8,9"/>
+                            </svg>
+                            ${escapeHtml(safeIsbn)}
+                        </span>
+                    `);
                 }
 
-                const metadata = metaParts.length > 0
-                    ? `<p class="book-details">${metaParts.join(' | ')}</p>`
-                    : '';
+                // Rating display
+                const ratingDisplay = communityRating !== null ? `
+                    <div class="book-rating">
+                        <div class="book-rating-stars">
+                            ${generateStarRating(communityRating)}
+                        </div>
+                        <span class="book-rating-value">${communityRating.toFixed(1)}</span>
+                        <span class="book-rating-label">Community Rating</span>
+                    </div>
+                ` : '';
 
-                const description = safeDescription
-                    ? `<p class="book-details">${escapeHtml(safeDescription)}</p>`
-                    : '';
+                // Description with better formatting
+                const description = safeDescription ? `
+                    <div class="book-description">
+                        <p>${escapeHtml(safeDescription)}</p>
+                    </div>
+                ` : '';
 
-                const quote = safeQuote
-                    ? `<p class="book-details book-quote">“${escapeHtml(safeQuote)}”</p>`
-                    : '';
+                // Quote with better styling
+                const quote = safeQuote ? `
+                    <div class="book-quote-container">
+                        <svg class="book-quote-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/>
+                            <path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/>
+                        </svg>
+                        <blockquote class="book-quote">${escapeHtml(safeQuote)}</blockquote>
+                    </div>
+                ` : '';
 
                 const cover = safeCover ? escapeAttribute(safeCover) : '';
-
                 const coverData = escapeAttribute(safeCover ?? '');
                 const initialCover = cover || placeholderCover;
                 const descriptionData = escapeAttribute(safeDescription ?? '');
@@ -805,27 +857,38 @@
                             <img src="${initialCover}" data-cover-src="${cover}" alt="${title}" loading="lazy" referrerpolicy="no-referrer" />
                         </div>
                         <div class="book-info">
-                            <h3 class="book-title">${title}</h3>
-                            <p class="book-author">by ${author}</p>
-                            ${metadata}
+                            <div class="book-header">
+                                <h3 class="book-title">${title}</h3>
+                                <p class="book-author">by ${author}</p>
+                            </div>
+                            
+                            ${metadataBadges.length > 0 ? `
+                                <div class="book-metadata">
+                                    ${metadataBadges.join('')}
+                                </div>
+                            ` : ''}
+                            
+                            ${ratingDisplay}
                             ${description}
                             ${quote}
                         </div>
-                        <button class="add-book-btn"
-                            data-title="${escapeAttribute(rawTitle)}"
-                            data-author="${escapeAttribute(rawAuthor)}"
-                            data-description="${descriptionData}"
-                            data-cover="${coverData}"
-                            data-category="${categoryData}"
-                            data-quote="${quoteData}"
-                            data-isbn="${isbnData}"
-                            data-public-rating="${ratingData}">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="12" y1="5" x2="12" y2="19"></line>
-                                <line x1="5" y1="12" x2="19" y2="12"></line>
-                            </svg>
-                            Add
-                        </button>
+                        <div class="book-actions">
+                            <button class="add-book-btn"
+                                data-title="${escapeAttribute(rawTitle)}"
+                                data-author="${escapeAttribute(rawAuthor)}"
+                                data-description="${descriptionData}"
+                                data-cover="${coverData}"
+                                data-category="${categoryData}"
+                                data-quote="${quoteData}"
+                                data-isbn="${isbnData}"
+                                data-public-rating="${ratingData}">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Add to Library
+                            </button>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -855,6 +918,30 @@
                         return char;
                 }
             });
+        }
+
+        function generateStarRating(rating) {
+            const stars = [];
+            const fullStars = Math.floor(rating);
+            const hasHalfStar = rating % 1 >= 0.5;
+            const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+
+            // Full stars
+            for (let i = 0; i < fullStars; i++) {
+                stars.push('<svg class="star star--full" viewBox="0 0 24 24" fill="currentColor"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"></polygon></svg>');
+            }
+
+            // Half star
+            if (hasHalfStar) {
+                stars.push('<svg class="star star--half" viewBox="0 0 24 24"><defs><linearGradient id="half-fill"><stop offset="50%" stop-color="currentColor"/><stop offset="50%" stop-color="transparent"/></linearGradient></defs><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" fill="url(#half-fill)" stroke="currentColor" stroke-width="1"></polygon></svg>');
+            }
+
+            // Empty stars
+            for (let i = 0; i < emptyStars; i++) {
+                stars.push('<svg class="star star--empty" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"></polygon></svg>');
+            }
+
+            return stars.join('');
         }
 
         function escapeAttribute(value) {

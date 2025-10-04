@@ -38,6 +38,12 @@ namespace BookWise.Web.Migrations
                     table.PrimaryKey("PK_Authors", x => x.Id);
                 });
 
+            migrationBuilder.CreateIndex(
+                name: "IX_Authors_NormalizedName",
+                table: "Authors",
+                column: "NormalizedName",
+                unique: true);
+
             migrationBuilder.Sql(@"
                 INSERT INTO Authors (Name, NormalizedName, CreatedAt)
                 VALUES ('Unknown Author', 'unknown author', CURRENT_TIMESTAMP)
@@ -91,12 +97,6 @@ namespace BookWise.Web.Migrations
                 name: "IX_Books_Title_AuthorId",
                 table: "Books",
                 columns: new[] { "Title", "AuthorId" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Authors_NormalizedName",
-                table: "Authors",
-                column: "NormalizedName",
-                unique: true);
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Books_Authors_AuthorId",
