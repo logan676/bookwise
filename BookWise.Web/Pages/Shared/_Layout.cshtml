@@ -8,9 +8,20 @@
     <script>
         (function () {
             try {
-                var preference = localStorage.getItem('bookwise.theme') || 'system';
+                var stored = localStorage.getItem('bookwise.theme');
+                var available = ['light', 'dark', 'system', 'forest', 'ocean', 'sunset', 'rose', 'lavender'];
+                var preference = available.indexOf(stored) !== -1 ? stored : 'system';
                 var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                var resolved = preference === 'dark' || (preference === 'system' && prefersDark) ? 'dark' : 'light';
+                var resolved;
+
+                if (preference === 'system') {
+                    resolved = prefersDark ? 'dark' : 'light';
+                } else if (preference === 'dark' || preference === 'light') {
+                    resolved = preference;
+                } else {
+                    resolved = preference;
+                }
+
                 document.documentElement.dataset.theme = resolved;
                 document.documentElement.dataset.themePreference = preference;
             } catch (error) {

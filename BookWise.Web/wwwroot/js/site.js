@@ -42,6 +42,16 @@
   const themeConfig = {
     storageKey: "bookwise.theme",
     defaultPreference: "system",
+    availablePreferences: [
+      "light",
+      "dark",
+      "system",
+      "forest",
+      "ocean",
+      "sunset",
+      "rose",
+      "lavender",
+    ],
     systemMatcher: typeof window.matchMedia === "function"
       ? window.matchMedia("(prefers-color-scheme: dark)")
       : null,
@@ -132,7 +142,7 @@
   }
 
   function applyTheme(preference, options = {}) {
-    if (!preference) {
+    if (!preference || !themeConfig.availablePreferences.includes(preference)) {
       preference = themeConfig.defaultPreference;
     }
 
@@ -172,7 +182,7 @@
   function getStoredThemePreference() {
     try {
       const value = localStorage.getItem(themeConfig.storageKey);
-      if (value === "light" || value === "dark" || value === "system") {
+      if (value && themeConfig.availablePreferences.includes(value)) {
         return value;
       }
     } catch (error) {
@@ -183,6 +193,9 @@
 
   function storeThemePreference(value) {
     try {
+      if (!themeConfig.availablePreferences.includes(value)) {
+        return;
+      }
       localStorage.setItem(themeConfig.storageKey, value);
     } catch (error) {
       /* ignore storage errors */

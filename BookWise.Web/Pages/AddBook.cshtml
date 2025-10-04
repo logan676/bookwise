@@ -811,16 +811,16 @@
                     `);
                 }
 
-                // Rating display
-                const ratingDisplay = communityRating !== null ? `
-                    <div class="book-rating">
-                        <div class="book-rating-stars">
-                            ${generateStarRating(communityRating)}
-                        </div>
-                        <span class="book-rating-value">${communityRating.toFixed(1)}</span>
-                        <span class="book-rating-label">Community Rating</span>
-                    </div>
-                ` : '';
+                if (communityRating !== null) {
+                    metadataBadges.push(`
+                        <span class="book-badge book-badge--rating">
+                            <svg class="book-badge-icon" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
+                                <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+                            </svg>
+                            ${communityRating.toFixed(1)}/5
+                        </span>
+                    `);
+                }
 
                 // Description with better formatting
                 const description = safeDescription ? `
@@ -868,7 +868,6 @@
                                 </div>
                             ` : ''}
                             
-                            ${ratingDisplay}
                             ${description}
                             ${quote}
                         </div>
