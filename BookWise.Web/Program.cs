@@ -1229,11 +1229,11 @@ static class DoubanBookSearch
             var parsedBook = parsed;
 
             var title = string.IsNullOrWhiteSpace(parsedBook.Title)
-                ? suggestion.Title
+                ? (string.IsNullOrWhiteSpace(suggestion.Title) ? "Untitled" : suggestion.Title)
                 : parsedBook.Title;
 
             var author = string.IsNullOrWhiteSpace(parsedBook.Author)
-                ? (suggestion.Author ?? "未知作者")
+                ? (string.IsNullOrWhiteSpace(suggestion.Author) ? "未知作者" : suggestion.Author)
                 : parsedBook.Author;
 
             var description = string.IsNullOrWhiteSpace(parsedBook.Description)
@@ -1321,7 +1321,7 @@ static class DoubanBookSearch
         var category = InferCategory(document, title, description);
         var rating = ParseRating(document);
 
-        var sanitizedTitle = HtmlEntity.DeEntitize(title);
+        var sanitizedTitle = string.IsNullOrWhiteSpace(title) ? "Untitled" : HtmlEntity.DeEntitize(title);
         var sanitizedAuthor = string.IsNullOrWhiteSpace(author) ? "未知作者" : HtmlEntity.DeEntitize(author);
         var sanitizedDescription = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(description) ? null : HtmlEntity.DeEntitize(description), 2000);
         var sanitizedQuote = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(quote) ? null : HtmlEntity.DeEntitize(quote), 500);

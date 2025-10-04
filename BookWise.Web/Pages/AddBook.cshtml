@@ -362,8 +362,8 @@
             const parsedPublicRating = Number.parseFloat(publicRating);
 
             return {
-                title: title.trim(),
-                author: author.trim(),
+                title: title.trim() || 'Untitled',
+                author: author.trim() || 'Unknown author',
                 description: toNullable(description),
                 coverImageUrl: toNullable(cover),
                 category: toNullable(category),
@@ -475,16 +475,16 @@
                 avatarUrl: authorAvatarUrl
             });
 
-            if (!payload.title || !payload.author) {
+            if (!payload.Title || !payload.Author) {
                 setModalFeedback('We need a title and author to add this book.', 'error');
                 return;
             }
 
             logActivity('Saving book to library', {
                 details: {
-                    title: payload.title,
-                    author: payload.author,
-                    status: payload.status
+                    title: payload.Title,
+                    author: payload.Author,
+                    status: payload.Status
                 },
                 variant: 'info'
             });
@@ -561,8 +561,10 @@
                 .toString()
                 .trim()
                 .toLowerCase();
-            const title = sanitizeOptionalText(book.title, 200) ?? '';
-            const author = sanitizeOptionalText(book.author, 200) ?? '';
+            
+            // Ensure we have fallback values for required fields
+            const title = sanitizeOptionalText(book.title, 200) || 'Untitled';
+            const author = sanitizeOptionalText(book.author, 200) || 'Unknown author';
 
             const personalRating = normalizeRatingValue(extras.rating);
             const publicRating = normalizeRatingValue(book.publicRating);
@@ -772,21 +774,22 @@
 
         function renderResults(results) {
             const html = results.map((book) => {
-                const rawTitle = book.title ?? 'Untitled';
-                const rawAuthor = book.author ?? 'Unknown author';
+                // Handle both camelCase and PascalCase properties
+                const rawTitle = book.title || book.Title || 'Untitled';
+                const rawAuthor = book.author || book.Author || 'Unknown author';
                 const title = escapeHtml(rawTitle);
                 const author = escapeHtml(rawAuthor);
 
-                const safePublished = sanitizeOptionalText(book.published, 120);
-                const safeLanguage = sanitizeOptionalText(book.language, 60);
-                const safeDescription = sanitizeOptionalText(book.description, 2000);
-                const safeQuote = sanitizeOptionalText(book.quote, 500);
-                const safeCategory = sanitizeOptionalText(book.category, 100);
-                const safeIsbn = sanitizeOptionalText(book.isbn, 20);
-                const safeCover = sanitizeOptionalText(book.coverImageUrl, 500);
+                const safePublished = sanitizeOptionalText(book.published || book.Published, 120);
+                const safeLanguage = sanitizeOptionalText(book.language || book.Language, 60);
+                const safeDescription = sanitizeOptionalText(book.description || book.Description, 2000);
+                const safeQuote = sanitizeOptionalText(book.quote || book.Quote, 500);
+                const safeCategory = sanitizeOptionalText(book.category || book.Category, 100);
+                const safeIsbn = sanitizeOptionalText(book.isbn || book.Isbn, 20);
+                const safeCover = sanitizeOptionalText(book.coverImageUrl || book.CoverImageUrl, 500);
 
-                const communityRating = typeof book.rating === 'number' && Number.isFinite(book.rating)
-                    ? book.rating
+                const communityRating = typeof (book.rating || book.Rating) === 'number' && Number.isFinite(book.rating || book.Rating)
+                    ? (book.rating || book.Rating)
                     : null;
 
                 // Build metadata badges
