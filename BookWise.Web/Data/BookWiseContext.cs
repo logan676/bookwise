@@ -37,6 +37,8 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
 
             entity.Property(b => b.PublicRating)
                 .HasPrecision(2, 1);
+            entity.Property(b => b.DoubanSubjectId)
+                .HasMaxLength(32);
             entity.Property(b => b.Quote).HasMaxLength(500);
 
             entity.HasIndex(b => new { b.Title, b.AuthorId });
@@ -106,6 +108,10 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
 
             entity.Property(q => q.BackgroundImageUrl)
                 .HasMaxLength(500);
+
+            entity.Property(q => q.Origin)
+                .HasConversion<string>()
+                .HasMaxLength(32);
 
             entity.Property(q => q.AddedOn)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");

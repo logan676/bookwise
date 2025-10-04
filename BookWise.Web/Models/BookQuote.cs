@@ -2,6 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BookWise.Web.Models;
 
+public enum BookQuoteSource
+{
+    Snapshot,
+    Community
+}
+
 public class BookQuote
 {
     public int Id { get; set; }
@@ -24,6 +30,8 @@ public class BookQuote
 
     [MaxLength(500)]
     public string? BackgroundImageUrl { get; set; }
+
+    public BookQuoteSource Origin { get; set; } = BookQuoteSource.Snapshot;
 
     public DateTimeOffset AddedOn { get; set; } = DateTimeOffset.UtcNow;
 }

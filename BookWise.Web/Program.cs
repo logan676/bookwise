@@ -140,7 +140,8 @@ static Book CreateSeedBook(
             {
                 Text = quote,
                 Author = author.Name,
-                Source = title
+                Source = title,
+                Origin = BookQuoteSource.Snapshot
             }
         }
     };
@@ -468,6 +469,7 @@ record CreateBookRequest(
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
     [property: MaxLength(20)] string? Isbn,
+    [property: MaxLength(32)] string? DoubanSubjectId,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
     [property: Range(0, 5)] decimal? PersonalRating,
@@ -489,6 +491,7 @@ record CreateBookRequest(
             CoverImageUrl = TrimToLength(CoverImageUrl, 500),
             Category = TrimToLength(Category, 100),
             Isbn = NormalizeIsbn(Isbn),
+            DoubanSubjectId = NormalizeDoubanSubjectId(DoubanSubjectId),
             Status = NormalizeStatus(Status),
             PersonalRating = NormalizeRating(PersonalRating),
             PublicRating = NormalizeRating(PublicRating),
@@ -515,6 +518,7 @@ record CreateBookRequest(
         var normalizedCover = TrimToLength(CoverImageUrl, 500);
         var normalizedCategory = TrimToLength(Category, 100);
         var normalizedIsbn = NormalizeIsbn(Isbn);
+        var normalizedDoubanSubjectId = NormalizeDoubanSubjectId(DoubanSubjectId);
         var normalizedStatus = NormalizeStatus(Status);
         var normalizedPersonalRating = NormalizeRating(PersonalRating);
         var normalizedPublicRating = NormalizeRating(PublicRating);
@@ -531,6 +535,7 @@ record CreateBookRequest(
             CoverImageUrl = normalizedCover,
             Category = normalizedCategory,
             ISBN = normalizedIsbn,
+            DoubanSubjectId = normalizedDoubanSubjectId,
             Status = normalizedStatus,
             IsFavorite = IsFavorite,
             PersonalRating = normalizedPersonalRating,
@@ -747,6 +752,23 @@ record CreateBookRequest(
         return null;
     }
 
+    public static string? NormalizeDoubanSubjectId(string? subjectId)
+    {
+        if (string.IsNullOrWhiteSpace(subjectId))
+        {
+            return null;
+        }
+
+        var trimmed = subjectId.Trim();
+        var filtered = new string(trimmed.Where(char.IsLetterOrDigit).ToArray());
+        if (string.IsNullOrWhiteSpace(filtered))
+        {
+            return null;
+        }
+
+        return filtered.Length <= 32 ? filtered : filtered[..32];
+    }
+
     private static CreateBookRemark[]? NormalizeRemarks(CreateBookRemark[]? remarks)
     {
         if (remarks is null || remarks.Length == 0)
@@ -773,7 +795,7 @@ record CreateBookRequest(
             book.Author,
             book.CoverImageUrl);
 
-        var existing = book.Quotes.FirstOrDefault();
+        var existing = book.Quotes.FirstOrDefault(q => q.Origin == BookQuoteSource.Snapshot);
 
         if (snapshot is null)
         {
@@ -795,6 +817,7 @@ record CreateBookRequest(
         existing.Author = snapshot.Author;
         existing.Source = snapshot.Source;
         existing.BackgroundImageUrl = snapshot.BackgroundImageUrl;
+        existing.Origin = BookQuoteSource.Snapshot;
     }
 
     internal static BookQuote? CreateQuoteSnapshot(string? quote, string title, string author, string? coverImageUrl)
@@ -813,6 +836,7 @@ record CreateBookRequest(
             Text = quote,
             Author = resolvedAuthor,
             Source = resolvedSource,
+            Origin = BookQuoteSource.Snapshot,
             BackgroundImageUrl = resolvedCover,
             AddedOn = DateTimeOffset.UtcNow
         };
@@ -890,6 +914,7 @@ record UpdateBookRequest(
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
     [property: MaxLength(20)] string? Isbn,
+    [property: MaxLength(32)] string? DoubanSubjectId,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
     bool IsFavorite,
     [property: Range(0, 5)] decimal? PersonalRating,
@@ -906,6 +931,7 @@ record UpdateBookRequest(
         CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500),
         Category = CreateBookRequest.TrimToLength(Category, 100),
         Isbn = CreateBookRequest.NormalizeIsbn(Isbn),
+        DoubanSubjectId = CreateBookRequest.NormalizeDoubanSubjectId(DoubanSubjectId),
         Status = NormalizeStatus(Status),
         PersonalRating = CreateBookRequest.NormalizeRating(PersonalRating),
         PublicRating = CreateBookRequest.NormalizeRating(PublicRating)
@@ -934,6 +960,7 @@ record UpdateBookRequest(
         book.CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500);
         book.Category = CreateBookRequest.TrimToLength(Category, 100);
         book.ISBN = CreateBookRequest.NormalizeIsbn(Isbn);
+        book.DoubanSubjectId = CreateBookRequest.NormalizeDoubanSubjectId(DoubanSubjectId);
         book.Status = NormalizeStatus(Status);
         book.IsFavorite = IsFavorite;
         book.PersonalRating = CreateBookRequest.NormalizeRating(PersonalRating);
@@ -980,7 +1007,8 @@ record BookSuggestion(
     decimal? Rating,
     string? Published,
     string? Language,
-    string? CoverImageUrl
+    string? CoverImageUrl,
+    string? DoubanSubjectId
 );
 
 static class JsonOptions
@@ -1056,6 +1084,40 @@ static class DoubanBookSearch
         }
 
         return results.ToArray();
+    }
+
+    private static string? ExtractDoubanSubjectId(Uri detailUri)
+    {
+        if (detailUri is null)
+        {
+            return null;
+        }
+
+        var segments = detailUri.Segments;
+        for (var index = 0; index < segments.Length; index++)
+        {
+            var segment = segments[index].Trim('/');
+            if (!segment.Equals("subject", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (index + 1 >= segments.Length)
+            {
+                break;
+            }
+
+            var candidate = segments[index + 1].Trim('/');
+            var filtered = new string(candidate.Where(char.IsLetterOrDigit).ToArray());
+            if (!string.IsNullOrWhiteSpace(filtered))
+            {
+                return filtered;
+            }
+        }
+
+        var path = detailUri.AbsolutePath;
+        var match = Regex.Match(path, @"subject/(\w+)", RegexOptions.IgnoreCase);
+        return match.Success ? match.Groups[1].Value : null;
     }
 
     private static async Task<List<DoubanSuggestion>> FetchSuggestionsAsync(
@@ -1284,6 +1346,8 @@ static class DoubanBookSearch
                 ? null
                 : parsedBook.CoverImageUrl;
 
+            var subjectId = ExtractDoubanSubjectId(suggestion.DetailUri);
+
             return new BookSuggestion(
                 title,
                 string.IsNullOrWhiteSpace(author) ? "未知作者" : author,
@@ -1294,7 +1358,8 @@ static class DoubanBookSearch
                 rating,
                 string.IsNullOrWhiteSpace(published) ? null : published,
                 language,
-                cover);
+                cover,
+                subjectId);
         }
         catch (OperationCanceledException)
         {
@@ -1358,7 +1423,8 @@ static class DoubanBookSearch
             rating,
             sanitizedPublished,
             sanitizedLanguage,
-            sanitizedCover);
+            sanitizedCover,
+            null);
     }
 
     private static decimal? ParseRating(HtmlDocument document)

@@ -19,6 +19,12 @@
                        class="search-input" 
                        autocomplete="off" 
                        aria-label="Search for a book" />
+                <div class="search-hint" id="search-hint">
+                    <span class="search-hint-text">Try: </span>
+                    <button type="button" class="search-hint-suggestion" data-suggestion="长安的荔枝">长安的荔枝</button>
+                    <button type="button" class="search-hint-suggestion" data-suggestion="安史之乱 : 历史、宣传与神话">安史之乱 : 历史、宣传与神话</button>
+                    <button type="button" class="search-hint-suggestion" data-suggestion="康熙的红票 : 全球化中的清朝">康熙的红票 : 全球化中的清朝</button>
+                </div>
                 <button type="button" class="search-submit" id="execute-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="11" cy="11" r="8"/>
@@ -137,6 +143,7 @@
         // Search functionality
         const searchInput = document.getElementById('book-search');
         const searchButton = document.getElementById('execute-search');
+        const searchHint = document.getElementById('search-hint');
         const emptyState = document.getElementById('empty-state');
         const searchResults = document.getElementById('search-results');
         const resultsList = document.getElementById('results-list');
@@ -173,6 +180,12 @@
                 label: 'Finished',
                 helper: 'Log it as completed and celebrate the win.'
             }
+        ];
+
+        const hintSuggestions = [
+            '长安的荔枝',
+            '安史之乱 : 历史、宣传与神话',
+            '康熙的红票 : 全球化中的清朝'
         ];
 
         const normalizeRatingValue = (value) => {
@@ -229,8 +242,38 @@
         searchInput.addEventListener('input', () => {
             if (!searchInput.value.trim()) {
                 showEmptyState();
+                showSearchHint();
+            } else {
+                hideSearchHint();
             }
         });
+
+        searchInput.addEventListener('focus', () => {
+            if (!searchInput.value.trim()) {
+                showSearchHint();
+            }
+        });
+
+        searchInput.addEventListener('blur', () => {
+            // Delay hiding to allow clicking on suggestions
+            setTimeout(() => {
+                hideSearchHint();
+            }, 150);
+        });
+
+        // Handle hint suggestion clicks
+        if (searchHint) {
+            searchHint.addEventListener('click', (event) => {
+                const suggestion = event.target.closest('.search-hint-suggestion');
+                if (suggestion) {
+                    const suggestionText = suggestion.dataset.suggestion;
+                    searchInput.value = suggestionText;
+                    hideSearchHint();
+                    searchInput.focus();
+                    handleSearch();
+                }
+            });
+        }
 
         searchButton.addEventListener('click', handleSearch);
 
@@ -289,6 +332,18 @@
             }
         }
 
+        function showSearchHint() {
+            if (searchHint) {
+                searchHint.style.display = 'flex';
+            }
+        }
+
+        function hideSearchHint() {
+            if (searchHint) {
+                searchHint.style.display = 'none';
+            }
+        }
+
         function setFeedback(message, state) {
             if (!message) {
                 searchFeedback.style.display = 'none';
@@ -340,6 +395,7 @@
                 category = '',
                 quote = '',
                 isbn = '',
+                doubanSubjectId = '',
                 publicRating = ''
             } = button.dataset;
 
@@ -358,6 +414,7 @@
                 category: toNullable(category),
                 quote: toNullable(quote),
                 isbn: toNullable(isbn),
+                doubanSubjectId: toNullable(doubanSubjectId),
                 publicRating: Number.isFinite(parsedPublicRating) ? parsedPublicRating : null
             };
         }
@@ -581,6 +638,7 @@
                 CoverImageUrl: sanitizeOptionalText(book.coverImageUrl, 500),
                 Category: sanitizeOptionalText(book.category, 100),
                 Isbn: sanitizeOptionalText(book.isbn, 20),
+                DoubanSubjectId: sanitizeOptionalText(book.doubanSubjectId, 32),
                 Status: normalizedStatus,
                 IsFavorite: false,
                 PersonalRating: personalRating,
@@ -657,12 +715,26 @@
         }
 
         async function handleSearch() {
-            const query = searchInput.value.trim();
+            let query = searchInput.value.trim();
+            
+            // If no query, use a random hint suggestion
+            if (!query) {
+                const randomIndex = Math.floor(Math.random() * hintSuggestions.length);
+                query = hintSuggestions[randomIndex];
+                searchInput.value = query;
+                
+                logActivity('Using hint suggestion', {
+                    details: { suggestion: query },
+                    variant: 'info'
+                });
+            }
+
             if (!query) {
                 showEmptyState();
                 return;
             }
 
+            hideSearchHint();
             searchButton.disabled = true;
             emptyState.style.display = 'none';
             searchResults.style.display = 'block';
@@ -789,6 +861,7 @@
                 const safeCategory = sanitizeOptionalText(book.category || book.Category, 100);
                 const safeIsbn = sanitizeOptionalText(book.isbn || book.Isbn, 20);
                 const safeCover = sanitizeOptionalText(book.coverImageUrl || book.CoverImageUrl, 500);
+                const doubanSubjectId = sanitizeOptionalText(book.doubanSubjectId || book.DoubanSubjectId, 32);
 
                 const communityRating = typeof (book.rating || book.Rating) === 'number' && Number.isFinite(book.rating || book.Rating)
                     ? (book.rating || book.Rating)
@@ -887,6 +960,7 @@
                 const categoryData = escapeAttribute(safeCategory ?? '');
                 const quoteData = escapeAttribute(safeQuote ?? '');
                 const isbnData = escapeAttribute(safeIsbn ?? '');
+                const doubanSubjectIdData = escapeAttribute(doubanSubjectId ?? '');
                 const ratingData = communityRating !== null
                     ? escapeAttribute(communityRating.toFixed(1))
                     : '';
@@ -920,6 +994,7 @@
                                 data-category="${categoryData}"
                                 data-quote="${quoteData}"
                                 data-isbn="${isbnData}"
+                                data-douban-subject-id="${doubanSubjectIdData}"
                                 data-public-rating="${ratingData}">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -1097,5 +1172,6 @@
         }
 
         showEmptyState();
+        hideSearchHint(); // Initialize hint as hidden
     </script>
 }

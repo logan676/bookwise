@@ -80,6 +80,7 @@ namespace BookWise.Web.Pages
                 CoverImageUrl,
                 Category,
                 ISBN,
+                DoubanSubjectId: null, // Not supported in this form
                 Status,
                 IsFavorite,
                 PersonalRating,

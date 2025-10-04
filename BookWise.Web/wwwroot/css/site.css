@@ -1564,6 +1564,51 @@ a:hover {
   color: var(--gray-400);
 }
 
+.search-hint {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  z-index: 1000;
+  flex-wrap: wrap;
+}
+
+.search-hint-text {
+  color: var(--gray-500);
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.search-hint-suggestion {
+  background: var(--bg-soft);
+  color: var(--gray-700);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.search-hint-suggestion:hover {
+  background: var(--brand-600);
+  color: white;
+  border-color: var(--brand-600);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(13, 110, 253, 0.2);
+}
+
 .search-mode-select {
   min-width: 120px;
   padding: 0.6rem 0.75rem;

@@ -37,6 +37,9 @@ public class Book
     [MaxLength(20)]
     public string? ISBN { get; set; }
 
+    [MaxLength(32)]
+    public string? DoubanSubjectId { get; set; }
+
     public string Status { get; set; } = "plan-to-read"; // plan-to-read, reading, read
 
     public bool IsFavorite { get; set; }
