@@ -103,8 +103,21 @@
                                      aria-labelledby="tab-@author.Slug"
                                      data-author="@author.Slug">
                                 <header class="author-headline">
-                                    <h1 class="author-display-name">@author.Name</h1>
-                                    <p class="author-summary">@author.Summary</p>
+                                    <div class="author-profile">
+                                        <div class="author-avatar">
+                                            <img src="@author.PhotoUrl" 
+                                                 alt="@author.Name" 
+                                                 loading="lazy" />
+                                        </div>
+                                        <div class="author-info">
+                                            <h1 class="author-display-name">@author.Name</h1>
+                                            <div class="author-meta">
+                                                <span class="author-work-count">@author.WorkCount @(author.WorkCount == 1 ? "work" : "works")</span>
+                                                <span class="author-library-count">@author.Library.Count in your library</span>
+                                            </div>
+                                            <p class="author-summary">@author.Summary</p>
+                                        </div>
+                                    </div>
                                 </header>
 
                                 <section class="author-collection">
