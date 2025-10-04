@@ -569,25 +569,25 @@
             const avatarUrl = sanitizeOptionalText(extras.avatarUrl, 500);
 
             const payload = {
-                title,
-                author,
-                description: sanitizeOptionalText(book.description, 2000),
-                quote: sanitizeOptionalText(book.quote, 500),
-                coverImageUrl: sanitizeOptionalText(book.coverImageUrl, 500),
-                category: sanitizeOptionalText(book.category, 100),
-                isbn: sanitizeOptionalText(book.isbn, 20),
-                status: normalizedStatus,
-                isFavorite: false,
-                personalRating,
-                publicRating
+                Title: title,
+                Author: author,
+                Description: sanitizeOptionalText(book.description, 2000),
+                Quote: sanitizeOptionalText(book.quote, 500),
+                CoverImageUrl: sanitizeOptionalText(book.coverImageUrl, 500),
+                Category: sanitizeOptionalText(book.category, 100),
+                Isbn: sanitizeOptionalText(book.isbn, 20),
+                Status: normalizedStatus,
+                IsFavorite: false,
+                PersonalRating: personalRating,
+                PublicRating: publicRating
             };
 
             if (avatarUrl) {
-                payload.authorAvatarUrl = avatarUrl;
+                payload.AuthorAvatarUrl = avatarUrl;
             }
 
             if (extras.remark) {
-                payload.remarks = [extras.remark];
+                payload.Remarks = [extras.remark];
             }
 
             return payload;
@@ -629,8 +629,8 @@
             const title = sanitizeOptionalText(remarkTitleInput?.value, 200);
             const limitedContent = content.length > 4000 ? content.slice(0, 4000) : content;
             return {
-                title,
-                content: limitedContent
+                Title: title,
+                Content: limitedContent
             };
         }
 
