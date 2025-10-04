@@ -186,85 +186,28 @@
                     },
                     variant: 'info'
                 });
-                
-                let response;
-                let usedFallback = false;
-                
-                try {
-                    response = await fetch('/api/book-search', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ query })
-                    });
-                } catch (error) {
-                    // If main search fails, try fallback for Chinese text
-                    logActivity('Main search failed, trying fallback', {
-                        details: { originalError: error.message },
-                        variant: 'warning'
-                    });
-                    
-                    response = await fetch('/api/book-search-fallback', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ query })
-                    });
-                    usedFallback = true;
-                }
+
+                const response = await fetch('/api/book-search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query })
+                });
 
                 if (!response.ok) {
-                    // If main search returns error status, try fallback for Chinese text
-                    if (!usedFallback && (response.status === 408 || response.status >= 500)) {
-                        logActivity('Main search returned error, trying fallback', {
-                            details: {
-                                status: response.status,
-                                statusText: response.statusText
-                            },
-                            variant: 'warning'
-                        });
-                        
-                        try {
-                            response = await fetch('/api/book-search-fallback', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ query })
-                            });
-                            usedFallback = true;
-                        } catch (fallbackError) {
-                            logActivity('Fallback search also failed', {
-                                details: { error: fallbackError.message },
-                                variant: 'error'
-                            });
-                            throw new Error('Both main and fallback search failed');
-                        }
-                    }
-                    
-                    if (!response.ok) {
-                        logActivity('Response received with error status', {
-                            details: {
-                                status: response.status,
-                                statusText: response.statusText
-                            },
-                            variant: 'error'
-                        });
-                        throw new Error('Search request failed');
-                    }
+                    await reportResponseError(response, query);
+                    return;
                 }
 
                 const data = await response.json();
                 const books = Array.isArray(data.books) ? data.books : [];
 
-                logActivity(`Response received${usedFallback ? ' (using fallback)' : ''}`, {
+                logActivity('Response received', {
                     details: {
                         status: response.status,
                         statusText: response.statusText,
                         totalBooks: books.length,
-                        usedFallback: usedFallback,
                         sample: books.slice(0, 3).map((book) => ({
                             title: book.title,
                             author: book.author,
@@ -276,16 +219,14 @@
 
                 if (books.length === 0) {
                     logActivity('No matching books found', {
-                        details: { query, usedFallback },
+                        details: { query },
                         variant: 'warning'
                     });
-                    setFeedback(usedFallback ? 
-                        'No fallback suggestions available for this search term.' : 
-                        'No matching books found. Try a different keyword.', 'error');
+                    setFeedback('No matching books found. Try a different keyword.', 'error');
                     return;
                 }
 
-                setFeedback(`Showing ${books.length} suggestion${books.length === 1 ? '' : 's'}${usedFallback ? ' (offline suggestions)' : ''}.`, 'success');
+                setFeedback(`Showing ${books.length} suggestion${books.length === 1 ? '' : 's'}.`, 'success');
                 logActivity('Suggestions ready', {
                     details: {
                         count: books.length
@@ -294,14 +235,44 @@
                 });
                 renderResults(books);
             } catch (error) {
+                const message = error instanceof Error && error.message
+                    ? error.message
+                    : 'There was an issue fetching suggestions. Please try again.';
+
                 logActivity('Search request failed', {
-                    details: error instanceof Error ? error.message : String(error),
+                    details: message,
                     variant: 'error'
                 });
-                setFeedback('There was an issue fetching suggestions. Please try again.', 'error');
+                setFeedback(message, 'error');
             } finally {
                 searchButton.disabled = false;
             }
+        }
+
+        async function reportResponseError(response, query) {
+            let message = 'There was an issue fetching suggestions. Please try again.';
+
+            try {
+                const errorBody = await response.json();
+                message = errorBody?.detail
+                    ?? errorBody?.title
+                    ?? errorBody?.message
+                    ?? message;
+            } catch {
+                message = `${message} (status ${response.status})`;
+            }
+
+            logActivity('Search request failed', {
+                details: {
+                    status: response.status,
+                    statusText: response.statusText,
+                    message,
+                    query
+                },
+                variant: 'error'
+            });
+
+            setFeedback(message, 'error');
         }
 
         function renderResults(results) {

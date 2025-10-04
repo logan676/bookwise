@@ -22,14 +22,14 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpClient("DeepSeek", client =>
 {
     client.BaseAddress = new Uri("https://api.deepseek.com/v1/");
-    client.Timeout = TimeSpan.FromSeconds(15); // Shorter timeout for faster feedback
+    client.Timeout = TimeSpan.FromSeconds(120);
 }).ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
 {
     Proxy = null,
     UseProxy = false,
-    ConnectTimeout = TimeSpan.FromSeconds(5), // Faster connection timeout
-    PooledConnectionLifetime = TimeSpan.FromMinutes(2) // Connection lifetime
-}); 
+    ConnectTimeout = TimeSpan.FromSeconds(30),
+    PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+});
 
 builder.Services.AddDbContext<BookWiseContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -197,18 +197,6 @@ books.MapDelete("/{id:int}", async (int id, BookWiseContext db) =>
     return Results.NoContent();
 });
 
-// Fallback search endpoint that doesn't rely on external APIs
-app.MapPost("/api/book-search-fallback", ([FromBody] BookSearchRequest request) =>
-{
-    if (string.IsNullOrWhiteSpace(request.Query))
-    {
-        return Results.BadRequest(new { message = "Query is required." });
-    }
-
-    var suggestions = GetChineseFallbackSuggestions(request.Query);
-    return Results.Ok(new BookSearchResponse(suggestions));
-});
-
 app.MapPost("/api/book-search", async Task<IResult> (
     [FromBody] BookSearchRequest request,
     IHttpClientFactory httpClientFactory,
@@ -262,7 +250,7 @@ app.MapPost("/api/book-search", async Task<IResult> (
         return Results.Problem("DeepSeek API key is not configured.", statusCode: StatusCodes.Status500InternalServerError);
     }
 
-    var model = configuration["DeepSeek:Model"] ?? "deepseek-chat"; // Use faster chat model instead of reasoner
+    var model = configuration["DeepSeek:Model"] ?? "deepseek-reasoner";
 
     var httpClient = httpClientFactory.CreateClient("DeepSeek");
     httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -270,14 +258,19 @@ app.MapPost("/api/book-search", async Task<IResult> (
     var requestBody = new
     {
         model,
-        temperature = 0.3, // Lower temperature for more consistent results
-        max_tokens = 1000, // Limit response size for faster processing
+        temperature = 0.3,
+        max_tokens = 2500,
+        stream = false,
+        response_format = new
+        {
+            type = "json_object"
+        },
         messages = new object[]
         {
             new
             {
                 role = "system",
-                content = "Return book search results as JSON only. Format: {\"books\":[{\"title\":\"string\",\"author\":\"string\",\"description\":\"string\",\"publishedYear\":number}]}. Be concise."
+                content = "Respond with pure JSON (no markdown, no code fences). Format exactly as {\"books\":[{\"title\":string,\"author\":string,\"description\":string,\"published\":string|null,\"language\":string|null,\"coverImageUrl\":string|null}]}."
             },
             new
             {
@@ -300,9 +293,10 @@ app.MapPost("/api/book-search", async Task<IResult> (
 
         using var responseStream = await response.Content.ReadAsStreamAsync();
         using var document = await JsonDocument.ParseAsync(responseStream);
-        if (!document.RootElement.TryGetProperty("choices", out var choicesElement) || choicesElement.ValueKind != JsonValueKind.Array || choicesElement.GetArrayLength() == 0)
+        if (!document.RootElement.TryGetProperty("choices", out var choicesElement) ||
+            choicesElement.ValueKind != JsonValueKind.Array || choicesElement.GetArrayLength() == 0)
         {
-            return Results.Ok(new { books = Array.Empty<BookSuggestion>() });
+            return Results.Problem("DeepSeek response did not include any choices.", statusCode: StatusCodes.Status502BadGateway);
         }
 
         var content = choicesElement
@@ -346,43 +340,38 @@ app.MapPost("/api/book-search", async Task<IResult> (
 
         if (string.IsNullOrWhiteSpace(content))
         {
-            return Results.Ok(new { books = Array.Empty<BookSuggestion>() });
+            return Results.Problem("DeepSeek response was empty.", statusCode: StatusCodes.Status502BadGateway);
         }
 
         var booksJson = ExtractJsonObject(content);
         if (string.IsNullOrWhiteSpace(booksJson))
         {
-            return Results.Ok(new { books = Array.Empty<BookSuggestion>() });
+            return Results.Problem("DeepSeek response did not contain valid JSON output.", statusCode: StatusCodes.Status502BadGateway);
         }
 
+        BookSearchResponse? suggestions;
         try
         {
-            var suggestions = JsonSerializer.Deserialize<BookSearchResponse>(booksJson, JsonOptions.Instance);
-            return Results.Ok(suggestions ?? new BookSearchResponse(Array.Empty<BookSuggestion>()));
+            suggestions = JsonSerializer.Deserialize<BookSearchResponse>(booksJson, JsonOptions.Instance);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return Results.Ok(new { books = Array.Empty<BookSuggestion>() });
+            return Results.Problem($"DeepSeek returned invalid JSON: {ex.Message}", statusCode: StatusCodes.Status502BadGateway);
         }
+
+        if (suggestions?.Books is not { Length: >= 0 })
+        {
+            return Results.Problem("DeepSeek response was missing the books collection.", statusCode: StatusCodes.Status502BadGateway);
+        }
+
+        return Results.Ok(suggestions);
     }
     catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
     {
-        // Return fallback suggestions for Chinese search terms when API times out
-        if (IsChineseText(request.Query))
-        {
-            var fallbackSuggestions = GetChineseFallbackSuggestions(request.Query);
-            return Results.Ok(new BookSearchResponse(fallbackSuggestions));
-        }
-        return Results.Problem("Search request timed out. Please try a simpler search term.", statusCode: StatusCodes.Status408RequestTimeout);
+        return Results.Problem("Search request timed out. Please try again.", statusCode: StatusCodes.Status504GatewayTimeout);
     }
     catch (TaskCanceledException)
     {
-        // Return fallback suggestions for Chinese search terms when API is canceled
-        if (IsChineseText(request.Query))
-        {
-            var fallbackSuggestions = GetChineseFallbackSuggestions(request.Query);
-            return Results.Ok(new BookSearchResponse(fallbackSuggestions));
-        }
         return Results.Problem("Search request was canceled. Please try again.", statusCode: StatusCodes.Status408RequestTimeout);
     }
     catch (HttpRequestException ex)
@@ -394,45 +383,6 @@ app.MapPost("/api/book-search", async Task<IResult> (
         return Results.Problem($"An error occurred while searching: {ex.Message}", statusCode: StatusCodes.Status500InternalServerError);
     }
 });
-
-// Helper functions for fallback search suggestions
-static bool IsChineseText(string text)
-{
-    if (string.IsNullOrWhiteSpace(text)) return false;
-    return text.Any(c => c >= 0x4E00 && c <= 0x9FFF); // Basic Chinese characters range
-}
-
-static BookSuggestion[] GetChineseFallbackSuggestions(string query)
-{
-    // Provide some common Chinese book suggestions as fallback
-    var suggestions = new List<BookSuggestion>();
-    
-    if (query.Contains("一地鸡毛"))
-    {
-        suggestions.Add(new BookSuggestion("一地鸡毛", "刘震云", "当代中国文学作品，描述了改革开放后的中国社会变迁。", "1992", "Chinese", null));
-        suggestions.Add(new BookSuggestion("一句顶一万句", "刘震云", "刘震云的另一部代表作品。", "2009", "Chinese", null));
-    }
-    else if (query.Contains("红楼梦"))
-    {
-        suggestions.Add(new BookSuggestion("红楼梦", "曹雪芹", "中国古典四大名著之一。", "1791", "Chinese", null));
-    }
-    else if (query.Contains("西游记"))
-    {
-        suggestions.Add(new BookSuggestion("西游记", "吴承恩", "中国古典四大名著之一。", "1592", "Chinese", null));
-    }
-    else
-    {
-        // Generic Chinese literature suggestions
-        suggestions.AddRange(new[]
-        {
-            new BookSuggestion("活着", "余华", "当代中国文学经典作品。", "1993", "Chinese", null),
-            new BookSuggestion("围城", "钱钟书", "现代中国文学名著。", "1947", "Chinese", null),
-            new BookSuggestion("平凡的世界", "路遥", "茅盾文学奖获奖作品。", "1986", "Chinese", null)
-        });
-    }
-    
-    return suggestions.Take(3).ToArray();
-}
 
 app.Run();
 
