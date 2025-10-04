@@ -984,7 +984,11 @@ a:hover {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: linear-gradient(135deg, var(--brand-600) 0%, var(--brand-700) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--brand-600) 0%,
+    var(--brand-700) 100%
+  );
   color: white;
   border: 2px solid transparent;
   border-radius: 8px;
@@ -998,7 +1002,11 @@ a:hover {
 }
 
 .add-book-btn:hover {
-  background: linear-gradient(135deg, var(--brand-700) 0%, var(--brand-600) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--brand-700) 0%,
+    var(--brand-600) 100%
+  );
   border-color: var(--brand-500);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
@@ -2249,7 +2257,11 @@ a:hover {
 }
 
 .search-result-item .add-book-btn:hover {
-  background: linear-gradient(135deg, var(--brand-700) 0%, var(--brand-600) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--brand-700) 0%,
+    var(--brand-600) 100%
+  );
   border-color: var(--brand-500);
   transform: translateY(-2px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);

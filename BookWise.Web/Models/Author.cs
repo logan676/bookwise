@@ -19,6 +19,14 @@ public class Author
     [MaxLength(500)]
     public string? AvatarUrl { get; set; }
 
+    [MaxLength(2000)]
+    public string? ProfileSummary { get; set; }
+
+    [MaxLength(1000)]
+    public string? ProfileNotableWorks { get; set; }
+
+    public DateTimeOffset? ProfileRefreshedAt { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset? UpdatedAt { get; set; }

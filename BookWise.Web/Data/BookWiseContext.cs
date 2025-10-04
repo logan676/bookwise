@@ -62,6 +62,15 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
             entity.Property(a => a.AvatarUrl)
                 .HasMaxLength(500);
 
+            entity.Property(a => a.ProfileSummary)
+                .HasMaxLength(2000);
+
+            entity.Property(a => a.ProfileNotableWorks)
+                .HasMaxLength(1000);
+
+            entity.Property(a => a.ProfileRefreshedAt)
+                .HasColumnType("TEXT");
+
             entity.Property(a => a.CreatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 

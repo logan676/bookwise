@@ -522,8 +522,6 @@ record CreateBookRequest(
         var normalizedStatus = NormalizeStatus(Status);
         var normalizedPersonalRating = NormalizeRating(PersonalRating);
         var normalizedPublicRating = NormalizeRating(PublicRating);
-        var remarks = BuildRemarks();
-
         var entity = new Book
         {
             Title = normalizedTitle,
@@ -539,9 +537,15 @@ record CreateBookRequest(
             Status = normalizedStatus,
             IsFavorite = IsFavorite,
             PersonalRating = normalizedPersonalRating,
-            PublicRating = normalizedPublicRating,
-            Remarks = remarks
+            PublicRating = normalizedPublicRating
         };
+
+        // Add remarks to the entity's collection instead of replacing it
+        var remarks = BuildRemarks();
+        foreach (var remark in remarks)
+        {
+            entity.Remarks.Add(remark);
+        }
 
         var quoteSnapshot = CreateQuoteSnapshot(
             normalizedQuote,
