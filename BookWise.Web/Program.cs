@@ -38,6 +38,12 @@ builder.Services.AddHttpClient("GoogleBooks", client =>
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 
+builder.Services.AddHttpClient("OpenLibrary", client =>
+{
+    client.BaseAddress = new Uri("https://openlibrary.org/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddDbContext<BookWiseContext>(options =>
     options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -594,7 +600,8 @@ static class BookSearchEnrichment
             return books;
         }
 
-        var client = httpClientFactory.CreateClient("GoogleBooks");
+        var googleClient = httpClientFactory.CreateClient("GoogleBooks");
+        var openLibraryClient = httpClientFactory.CreateClient("OpenLibrary");
         var enriched = new BookSuggestion[books.Length];
 
         for (var i = 0; i < books.Length; i++)
@@ -608,7 +615,13 @@ static class BookSearchEnrichment
             }
 
             logger.LogDebug("[{OperationId}] Fetching cover for '{Title}' by {Author}", operationId, book.Title, book.Author);
-            var coverUrl = await TryFetchCoverUrlAsync(client, book, logger, operationId, cancellationToken);
+            var coverUrl = await TryFetchGoogleCoverUrlAsync(googleClient, book, logger, operationId, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(coverUrl))
+            {
+                logger.LogDebug("[{OperationId}] Google Books returned no cover for '{Title}'. Trying Open Library fallback.", operationId, book.Title);
+                coverUrl = await TryFetchOpenLibraryCoverUrlAsync(openLibraryClient, book, logger, operationId, cancellationToken);
+            }
             if (!string.IsNullOrWhiteSpace(coverUrl))
             {
                 logger.LogInformation("[{OperationId}] Found cover for '{Title}'", operationId, book.Title);
@@ -624,7 +637,7 @@ static class BookSearchEnrichment
         return enriched;
     }
 
-    private static async Task<string?> TryFetchCoverUrlAsync(
+    private static async Task<string?> TryFetchGoogleCoverUrlAsync(
         HttpClient client,
         BookSuggestion book,
         ILogger logger,
@@ -717,6 +730,97 @@ static class BookSearchEnrichment
         catch (Exception ex)
         {
             logger.LogError(ex, "[{OperationId}] Failed to fetch cover for '{Title}'", operationId, book.Title);
+            return null;
+        }
+    }
+
+    private static async Task<string?> TryFetchOpenLibraryCoverUrlAsync(
+        HttpClient client,
+        BookSuggestion book,
+        ILogger logger,
+        Guid operationId,
+        CancellationToken cancellationToken)
+    {
+        var queryParts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(book.Title))
+        {
+            queryParts.Add($"title={Uri.EscapeDataString(book.Title)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(book.Author))
+        {
+            queryParts.Add($"author={Uri.EscapeDataString(book.Author)}");
+        }
+
+        if (queryParts.Count == 0)
+        {
+            logger.LogWarning("[{OperationId}] Skipping Open Library lookup because both title and author were empty", operationId);
+            return null;
+        }
+
+        queryParts.Add("limit=1");
+        queryParts.Add("fields=docs.cover_i,docs.isbn");
+
+        var requestUri = $"search.json?{string.Join('&', queryParts)}";
+
+        try
+        {
+            using var response = await client.GetAsync(requestUri, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogDebug("[{OperationId}] Open Library returned status {StatusCode} for '{Title}'", operationId, (int)response.StatusCode, book.Title);
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+
+            if (!document.RootElement.TryGetProperty("docs", out var docs) ||
+                docs.ValueKind != JsonValueKind.Array ||
+                docs.GetArrayLength() == 0)
+            {
+                logger.LogDebug("[{OperationId}] Open Library returned no docs for '{Title}'", operationId, book.Title);
+                return null;
+            }
+
+            var firstDoc = docs[0];
+
+            if (firstDoc.TryGetProperty("cover_i", out var coverIdElement) &&
+                coverIdElement.ValueKind == JsonValueKind.Number &&
+                coverIdElement.TryGetInt32(out var coverId) &&
+                coverId > 0)
+            {
+                return NormalizeCoverUrl($"https://covers.openlibrary.org/b/id/{coverId}-L.jpg");
+            }
+
+            if (firstDoc.TryGetProperty("isbn", out var isbnElement) &&
+                isbnElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var isbnValue in isbnElement.EnumerateArray())
+                {
+                    if (isbnValue.ValueKind == JsonValueKind.String)
+                    {
+                        var isbn = isbnValue.GetString();
+                        if (!string.IsNullOrWhiteSpace(isbn))
+                        {
+                            return NormalizeCoverUrl($"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg");
+                        }
+                    }
+                }
+            }
+
+            logger.LogDebug("[{OperationId}] Open Library doc missing cover information for '{Title}'", operationId, book.Title);
+            return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            logger.LogWarning("[{OperationId}] Open Library lookup cancelled for '{Title}'", operationId, book.Title);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "[{OperationId}] Failed to fetch Open Library cover for '{Title}'", operationId, book.Title);
             return null;
         }
     }
