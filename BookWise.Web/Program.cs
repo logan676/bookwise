@@ -724,13 +724,23 @@ record CreateBookRequest(
         }
 
         var trimmed = subjectId.Trim();
-        var filtered = new string(trimmed.Where(char.IsLetterOrDigit).ToArray());
-        if (string.IsNullOrWhiteSpace(filtered))
+
+        // Handle full Douban subject URLs like https://book.douban.com/subject/36593622/
+        // or https://book.douban.com/subject/36593622/?something
+        var m = Regex.Match(trimmed, @"/subject/(\d+)/?", RegexOptions.IgnoreCase);
+        if (m.Success)
         {
-            return null;
+            return m.Groups[1].Value;
         }
 
-        return filtered.Length <= 32 ? filtered : filtered[..32];
+        // If value looks like a plain numeric ID, keep only digits
+        var digits = new string(trimmed.Where(char.IsDigit).ToArray());
+        if (!string.IsNullOrWhiteSpace(digits))
+        {
+            return digits.Length <= 32 ? digits : digits[..32];
+        }
+
+        return null;
     }
 
     private static CreateBookRemark[]? NormalizeRemarks(CreateBookRemark[]? remarks)

@@ -146,11 +146,20 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             author.ProfileSummary = CreateBookRequest.TrimToLength(profile.Summary, 2000);
             author.ProfileNotableWorks = CreateBookRequest.TrimToLength(profile.NotableWorks, 1000);
 
-            // Update avatar URL if we found a valid one from Douban
+            // Update avatar metadata
             if (!string.IsNullOrWhiteSpace(profile.AvatarUrl))
             {
                 author.AvatarUrl = profile.AvatarUrl;
+                author.AvatarStatus = "Verified";
+                author.AvatarSource = CreateBookRequest.TrimToLength(profile.AvatarSource, 50);
                 _logger.LogInformation("Updated avatar URL for author {AuthorName} to {AvatarUrl}", author.Name, profile.AvatarUrl);
+            }
+            else
+            {
+                // Clear any external placeholders and mark as failed; UI will fallback to self-hosted placeholder
+                author.AvatarUrl = null;
+                author.AvatarStatus = "Failed";
+                author.AvatarSource = null;
             }
 
             // Update additional profile metadata
@@ -235,7 +244,9 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                     {
                         var authorId = match.Groups[1].Value;
                         _logger.LogInformation("Extracted author Douban ID {AuthorId} from URL {AuthorHref}", authorId, authorHref);
-                        return authorId;
+                        // Try to canonicalize via redirect to personage page
+                        var canonical = await TryCanonicalizeAuthorIdAsync(authorId, cancellationToken);
+                        return canonical ?? authorId;
                     }
                 }
                 
@@ -250,7 +261,8 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                 {
                     var authorId = m.Groups[1].Value;
                     _logger.LogInformation("Fallback extracted author Douban ID {AuthorId} from subject page HTML", authorId);
-                    return authorId;
+                    var canonical = await TryCanonicalizeAuthorIdAsync(authorId, cancellationToken);
+                    return canonical ?? authorId;
                 }
             }
 
@@ -273,6 +285,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             authorClient.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 (+https://bookwise.local)");
 
             string? avatarUrl = null;
+            string? avatarSource = null;
             string? summary = null;
             string? worksText = null;
             string? gender = null;
@@ -296,6 +309,17 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                     // Use og:image as primary avatar source
                     var ogImage = document.DocumentNode.SelectSingleNode("//meta[@property='og:image']")?.GetAttributeValue("content", null);
                     avatarUrl = NormalizeAvatarUrl(ogImage);
+                    if (string.IsNullOrWhiteSpace(avatarUrl))
+                    {
+                        // Fallback: first portrait image on personage page
+                        var portraitImg = document.DocumentNode.SelectSingleNode("//img[contains(@src,'/view/personage/')]");
+                        var src = portraitImg?.GetAttributeValue("src", null);
+                        avatarUrl = NormalizeAvatarUrl(src);
+                    }
+                    if (!string.IsNullOrWhiteSpace(avatarUrl))
+                    {
+                        avatarSource = "douban-personage";
+                    }
 
                     // Extract profile summary
                     var summaryNode = document.DocumentNode
@@ -353,7 +377,20 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                     var document2 = new HtmlDocument();
                     document2.LoadHtml(html2);
                     var ogImage2 = document2.DocumentNode.SelectSingleNode("//meta[@property='og:image']")?.GetAttributeValue("content", null);
-                    avatarUrl = string.IsNullOrWhiteSpace(avatarUrl) ? NormalizeAvatarUrl(ogImage2) : avatarUrl;
+                    if (string.IsNullOrWhiteSpace(avatarUrl))
+                    {
+                        avatarUrl = NormalizeAvatarUrl(ogImage2);
+                        if (string.IsNullOrWhiteSpace(avatarUrl))
+                        {
+                            var firstImg = document2.DocumentNode.SelectSingleNode("//img[contains(@src,'/view/author/') or contains(@src,'/view/personage/')]");
+                            var src2 = firstImg?.GetAttributeValue("src", null);
+                            avatarUrl = NormalizeAvatarUrl(src2);
+                        }
+                        if (!string.IsNullOrWhiteSpace(avatarUrl))
+                        {
+                            avatarSource = "douban-author";
+                        }
+                    }
 
                     var ogDesc = document2.DocumentNode.SelectSingleNode("//meta[@property='og:description']")?.GetAttributeValue("content", null);
                     if (string.IsNullOrWhiteSpace(summary) && !string.IsNullOrWhiteSpace(ogDesc))
@@ -367,10 +404,23 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                 }
             }
 
+            // Verify avatar URL if present
+            if (!string.IsNullOrWhiteSpace(avatarUrl))
+            {
+                var verified = await VerifyImageUrlAsync(authorClient, avatarUrl!, cancellationToken);
+                if (!verified)
+                {
+                    _logger.LogWarning("Avatar URL did not verify for author {AuthorId}: {AvatarUrl}", authorId, avatarUrl);
+                    avatarUrl = null;
+                    avatarSource = null;
+                }
+            }
+
             return new AuthorProfile(
                 Summary: summary,
                 NotableWorks: worksText,
                 AvatarUrl: avatarUrl,
+                AvatarSource: avatarSource,
                 Gender: gender,
                 BirthDate: birthDate,
                 BirthPlace: birthPlace,
@@ -702,10 +752,90 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
         return trimmed;
     }
 
+    private async Task<string?> TryCanonicalizeAuthorIdAsync(string authorId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var handler = new HttpClientHandler { AllowAutoRedirect = false };
+            using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 (+https://bookwise.local)");
+
+            var requestUrl = $"https://book.douban.com/author/{authorId}/";
+            using var response = await http.GetAsync(requestUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if ((int)response.StatusCode >= 300 && (int)response.StatusCode < 400)
+            {
+                var location = response.Headers.Location?.ToString();
+                if (!string.IsNullOrWhiteSpace(location))
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(location, @"/personage/(\d+)/?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (m.Success)
+                    {
+                        var canonical = m.Groups[1].Value;
+                        if (!string.Equals(canonical, authorId, StringComparison.Ordinal))
+                        {
+                            _logger.LogInformation("Canonicalized Douban author ID {Original} -> {Canonical}", authorId, canonical);
+                        }
+                        return canonical;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to canonicalize Douban author ID {AuthorId}", authorId);
+        }
+
+        return null;
+    }
+
+    private async Task<bool> VerifyImageUrlAsync(HttpClient client, string url, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using (var head = new HttpRequestMessage(HttpMethod.Head, url))
+            using (var response = await client.SendAsync(head, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
+            {
+                if ((int)response.StatusCode >= 200 && (int)response.StatusCode < 300)
+                {
+                    if (response.Content.Headers.ContentType?.MediaType is string mediaType && mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var length = response.Content.Headers.ContentLength;
+                        if (!length.HasValue || length.Value > 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // Fallback: GET headers if HEAD not supported
+            using var get = new HttpRequestMessage(HttpMethod.Get, url);
+            using var getResponse = await client.SendAsync(get, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+            if ((int)getResponse.StatusCode >= 200 && (int)getResponse.StatusCode < 300)
+            {
+                if (getResponse.Content.Headers.ContentType?.MediaType is string mt && mt.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    var len = getResponse.Content.Headers.ContentLength;
+                    if (!len.HasValue || len.Value > 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Avatar verification failed for {Url}", url);
+        }
+
+        return false;
+    }
+
     private sealed record AuthorProfile(
         string? Summary,
         string? NotableWorks,
         string? AvatarUrl,
+        string? AvatarSource,
         string? Gender,
         string? BirthDate,
         string? BirthPlace,
