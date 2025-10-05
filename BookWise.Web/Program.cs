@@ -130,6 +130,42 @@ app.MapRazorPages();
 
 var books = app.MapGroup("/api/books");
 var authors = app.MapGroup("/api/authors");
+var rankings = app.MapGroup("/api/rankings");
+
+rankings.MapGet("/annual", async (
+    [FromQuery] int year,
+    [FromQuery] string? market,
+    IWebHostEnvironment env,
+    ILogger<Program> logger,
+    CancellationToken cancellationToken) =>
+{
+    var resolvedMarket = string.IsNullOrWhiteSpace(market) ? "US" : market.Trim().ToUpperInvariant();
+    var fileName = $"amazon-annual-bestsellers-{year}.json";
+    var dataPath = Path.Combine(env.ContentRootPath, "Data", fileName);
+
+    try
+    {
+        AnnualRankingItem[] items;
+        if (File.Exists(dataPath))
+        {
+            await using var fs = File.OpenRead(dataPath);
+            var doc = await JsonSerializer.DeserializeAsync<AnnualRankingData>(fs, cancellationToken: cancellationToken);
+            items = doc?.Items ?? Array.Empty<AnnualRankingItem>();
+        }
+        else
+        {
+            logger.LogInformation("[Rankings] Data file not found for year {Year} at {Path}. Returning fallback sample.", year, dataPath);
+            items = AnnualRankingSamples.ForYear(year);
+        }
+
+        return Results.Ok(new AnnualRankingResponse(year, resolvedMarket, items));
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "[Rankings] Failed to load annual rankings for {Year}", year);
+        return Results.Problem("Failed to load annual rankings", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
 
 authors.MapPost("/refresh-avatar", async (
     [FromQuery] string name,
@@ -547,6 +583,41 @@ app.MapPost("/api/book-search", async Task<IResult> (
 });
 
 app.Run();
+
+record AnnualRankingResponse(int Year, string Market, AnnualRankingItem[] Items);
+record AnnualRankingData(AnnualRankingItem[] Items);
+record AnnualRankingItem(
+    int Rank,
+    string Title,
+    string? Author,
+    string? CoverImageUrl,
+    string? AmazonUrl,
+    decimal? Rating,
+    int? RatingsCount,
+    string? Category
+);
+
+static class AnnualRankingSamples
+{
+    public static AnnualRankingItem[] ForYear(int year)
+    {
+        // Lightweight placeholder data to demonstrate UI; replace with real Amazon integration or data files.
+        if (year <= 0) year = DateTime.UtcNow.Year;
+        return new[]
+        {
+            new AnnualRankingItem(1, "The Housemaid's Secret", "Freida McFadden", null, null, 4.5m, 91000, "Thriller"),
+            new AnnualRankingItem(2, "Fourth Wing", "Rebecca Yarros", null, null, 4.8m, 430000, "Fantasy"),
+            new AnnualRankingItem(3, "Iron Flame", "Rebecca Yarros", null, null, 4.5m, 240000, "Fantasy"),
+            new AnnualRankingItem(4, "The Woman in Me", "Britney Spears", null, null, 4.4m, 78000, "Memoir"),
+            new AnnualRankingItem(5, "Happy Place", "Emily Henry", null, null, 4.3m, 210000, "Romance"),
+            new AnnualRankingItem(6, "Lessons in Chemistry", "Bonnie Garmus", null, null, 4.6m, 400000, "Fiction"),
+            new AnnualRankingItem(7, "The Covenant of Water", "Abraham Verghese", null, null, 4.7m, 100000, "Historical"),
+            new AnnualRankingItem(8, "Spare", "Prince Harry", null, null, 4.2m, 210000, "Memoir"),
+            new AnnualRankingItem(9, "The Creative Act", "Rick Rubin", null, null, 4.5m, 44000, "Nonfiction"),
+            new AnnualRankingItem(10, "Atomic Habits", "James Clear", null, null, 4.8m, 160000, "Self-help")
+        };
+    }
+}
 
 record BookQuery(string? Search, bool OnlyFavorites = false, string? Category = null);
 

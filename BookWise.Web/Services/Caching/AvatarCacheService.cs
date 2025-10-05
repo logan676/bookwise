@@ -13,6 +13,8 @@ namespace BookWise.Web.Services.Caching;
 public interface IAvatarCacheService
 {
     Task<string?> GetCachedAvatarUrlAsync(string originalUrl, CancellationToken cancellationToken = default);
+    // Returns the cached URL if the file already exists, without attempting any network fetch
+    Task<string?> TryGetCachedAvatarUrlAsync(string originalUrl);
     Task<bool> IsCachedAsync(string originalUrl);
     Task ClearCacheAsync();
 }
@@ -88,6 +90,23 @@ public sealed class AvatarCacheService : IAvatarCacheService
             _logger.LogError(ex, "Error caching avatar from {OriginalUrl}", originalUrl);
             return null;
         }
+    }
+
+    public Task<string?> TryGetCachedAvatarUrlAsync(string originalUrl)
+    {
+        if (string.IsNullOrWhiteSpace(originalUrl))
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        var fileName = GenerateFileName(originalUrl);
+        var filePath = Path.Combine(_cacheDirectory, fileName);
+        if (File.Exists(filePath))
+        {
+            return Task.FromResult<string?>($"/cache/avatars/{fileName}");
+        }
+
+        return Task.FromResult<string?>(null);
     }
 
     public Task<bool> IsCachedAsync(string originalUrl)

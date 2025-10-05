@@ -1,0 +1,15 @@
+{
+  "items": [
+    { "rank": 1, "title": "The Housemaid's Secret", "author": "Freida McFadden", "coverImageUrl": null, "amazonUrl": null, "rating": 4.5, "ratingsCount": 91000, "category": "Thriller" },
+    { "rank": 2, "title": "Fourth Wing", "author": "Rebecca Yarros", "coverImageUrl": null, "amazonUrl": null, "rating": 4.8, "ratingsCount": 430000, "category": "Fantasy" },
+    { "rank": 3, "title": "Iron Flame", "author": "Rebecca Yarros", "coverImageUrl": null, "amazonUrl": null, "rating": 4.5, "ratingsCount": 240000, "category": "Fantasy" },
+    { "rank": 4, "title": "The Woman in Me", "author": "Britney Spears", "coverImageUrl": null, "amazonUrl": null, "rating": 4.4, "ratingsCount": 78000, "category": "Memoir" },
+    { "rank": 5, "title": "Happy Place", "author": "Emily Henry", "coverImageUrl": null, "amazonUrl": null, "rating": 4.3, "ratingsCount": 210000, "category": "Romance" },
+    { "rank": 6, "title": "Lessons in Chemistry", "author": "Bonnie Garmus", "coverImageUrl": null, "amazonUrl": null, "rating": 4.6, "ratingsCount": 400000, "category": "Fiction" },
+    { "rank": 7, "title": "The Covenant of Water", "author": "Abraham Verghese", "coverImageUrl": null, "amazonUrl": null, "rating": 4.7, "ratingsCount": 100000, "category": "Historical" },
+    { "rank": 8, "title": "Spare", "author": "Prince Harry", "coverImageUrl": null, "amazonUrl": null, "rating": 4.2, "ratingsCount": 210000, "category": "Memoir" },
+    { "rank": 9, "title": "The Creative Act", "author": "Rick Rubin", "coverImageUrl": null, "amazonUrl": null, "rating": 4.5, "ratingsCount": 44000, "category": "Nonfiction" },
+    { "rank": 10, "title": "Atomic Habits", "author": "James Clear", "coverImageUrl": null, "amazonUrl": null, "rating": 4.8, "ratingsCount": 160000, "category": "Self-help" }
+  ]
+}
+

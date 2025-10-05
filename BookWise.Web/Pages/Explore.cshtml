@@ -35,6 +35,15 @@
                 data-explore-tab="recommendations">
             Recommendations
         </button>
+        <button type="button"
+                class="explore-top-tab"
+                id="explore-tab-bestsellers"
+                role="tab"
+                aria-controls="explore-pane-bestsellers"
+                aria-selected="false"
+                data-explore-tab="bestsellers">
+            Yearly Bestsellers
+        </button>
     </div>
 
     <div class="explore-top-panels">
@@ -453,6 +462,46 @@
                 </section>
             </div>
         </section>
+
+        <section id="explore-pane-bestsellers"
+                 class="explore-top-panel"
+                 role="tabpanel"
+                 aria-labelledby="explore-tab-bestsellers"
+                 data-explore-tab="bestsellers"
+                 hidden>
+            <div class="bestsellers-page">
+                <header class="bestsellers-header">
+                    <p class="bestsellers-kicker">Amazon Rankings</p>
+                    <h1 class="bestsellers-title">Top Books of the Year</h1>
+                </header>
+
+                <section class="bestsellers-controls" aria-label="Year and category filters">
+                    <div class="control-group">
+                        <label for="bestsellers-year">Year</label>
+                        <select id="bestsellers-year" aria-label="Select year">
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="bestsellers-market">Region</label>
+                        <select id="bestsellers-market" aria-label="Select region">
+                            <option value="US" selected>United States</option>
+                            <option value="GB">United Kingdom</option>
+                            <option value="DE">Germany</option>
+                            <option value="JP">Japan</option>
+                        </select>
+                    </div>
+                </section>
+
+                <section class="bestsellers-results" aria-live="polite">
+                    <div class="bestsellers-grid" id="bestsellers-grid">
+                        <!-- Cards injected via JS -->
+                    </div>
+                    <div class="bestsellers-empty" id="bestsellers-empty" hidden>
+                        <p>No rankings available for the selected year.</p>
+                    </div>
+                </section>
+            </div>
+        </section>
     </div>
 </div>
 
@@ -493,6 +542,10 @@
                     }
 
                     syncPanels(target);
+
+                    if (target === 'bestsellers') {
+                        ensureBestsellersLoaded();
+                    }
                 });
             });
 
@@ -622,6 +675,111 @@
             document.querySelectorAll('.recommendation-card--author img[data-author-name]').forEach(img => {
                 ensureAvatarFor(img);
             });
+
+            // Yearly Bestsellers panel logic
+            let bestsellersLoaded = false;
+            const yearSelect = document.getElementById('bestsellers-year');
+            const marketSelect = document.getElementById('bestsellers-market');
+            const grid = document.getElementById('bestsellers-grid');
+            const emptyState = document.getElementById('bestsellers-empty');
+
+            function buildYearOptions() {
+                if (!yearSelect) return;
+                const now = new Date();
+                const currentYear = now.getFullYear();
+                const startYear = currentYear;
+                const minYear = currentYear - 9; // last 10 years
+                yearSelect.innerHTML = '';
+                for (let y = startYear; y >= minYear; y--) {
+                    const opt = document.createElement('option');
+                    opt.value = String(y);
+                    opt.textContent = String(y);
+                    if (y === currentYear) opt.selected = true;
+                    yearSelect.appendChild(opt);
+                }
+            }
+
+            function renderSkeleton(count = 8) {
+                grid.innerHTML = '';
+                emptyState.setAttribute('hidden', 'hidden');
+                for (let i = 0; i < count; i++) {
+                    const card = document.createElement('article');
+                    card.className = 'bestseller-card is-loading';
+                    card.innerHTML = `
+                        <div class="bestseller-rank"></div>
+                        <div class="bestseller-cover"></div>
+                        <div class="bestseller-info">
+                            <div class="line line-1"></div>
+                            <div class="line line-2"></div>
+                        </div>`;
+                    grid.appendChild(card);
+                }
+            }
+
+            function renderBestsellers(items) {
+                grid.innerHTML = '';
+                if (!items || !items.length) {
+                    emptyState.removeAttribute('hidden');
+                    return;
+                }
+                emptyState.setAttribute('hidden', 'hidden');
+
+                items.forEach(item => {
+                    const card = document.createElement('article');
+                    card.className = 'bestseller-card';
+                    const cover = item.coverImageUrl || '/img/book-placeholder.svg';
+                    const rank = item.rank ?? '';
+                    const rating = (item.rating != null) ? ` • ${item.rating.toFixed(1)}★` : '';
+                    const ratingsCount = (item.ratingsCount != null) ? ` (${item.ratingsCount.toLocaleString()})` : '';
+                    const author = item.author ? ` — ${item.author}` : '';
+                    const titleHtml = item.amazonUrl
+                        ? `<a href="${item.amazonUrl}" target="_blank" rel="noopener noreferrer">${item.title}</a>`
+                        : item.title;
+                    card.innerHTML = `
+                        <div class="bestseller-rank">#${rank}</div>
+                        <div class="bestseller-cover"><img src="${cover}" alt="${item.title} cover" loading="lazy" /></div>
+                        <div class="bestseller-info">
+                            <h3 class="bestseller-title">${titleHtml}</h3>
+                            <p class="bestseller-meta">${author}${rating}${ratingsCount}</p>
+                        </div>`;
+                    grid.appendChild(card);
+                });
+            }
+
+            async function loadBestsellers(year, market) {
+                renderSkeleton();
+                try {
+                    const res = await fetch(`/api/rankings/annual?year=${encodeURIComponent(year)}&market=${encodeURIComponent(market)}`);
+                    if (!res.ok) throw new Error('Failed to load rankings');
+                    const data = await res.json();
+                    renderBestsellers(data?.items ?? []);
+                } catch (err) {
+                    grid.innerHTML = '';
+                    emptyState.removeAttribute('hidden');
+                }
+            }
+
+            function ensureBestsellersLoaded() {
+                if (bestsellersLoaded) return;
+                buildYearOptions();
+                const year = yearSelect?.value || String(new Date().getFullYear());
+                const market = marketSelect?.value || 'US';
+                loadBestsellers(year, market);
+                bestsellersLoaded = true;
+            }
+
+            if (yearSelect && marketSelect) {
+                yearSelect.addEventListener('change', () => {
+                    loadBestsellers(yearSelect.value, marketSelect.value);
+                });
+                marketSelect.addEventListener('change', () => {
+                    loadBestsellers(yearSelect.value, marketSelect.value);
+                });
+            }
+            // If the bestsellers tab is active on initial load
+            if (document.querySelector('#explore-pane-bestsellers')?.classList.contains('is-active')) {
+                ensureBestsellersLoaded();
+            }
         });
     </script>
 
@@ -650,6 +808,49 @@
 
         .author-avatar-frame {
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Yearly Bestsellers styles */
+        .bestsellers-page {
+            width: min(var(--layout-max-width), 94%);
+            margin: 0 auto;
+            padding: 2rem 0 3.5rem;
+        }
+        .bestsellers-header { text-align: center; margin-bottom: 2rem; }
+        .bestsellers-kicker {
+            font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.18em;
+            color: var(--brand-600); font-weight: 700; margin-bottom: 0.6rem;
+        }
+        .bestsellers-title { font-size: clamp(2rem, 4vw, 3rem); margin: 0; color: var(--gray-900); }
+        .bestsellers-controls { display: flex; gap: 1rem; align-items: center; margin: 1rem 0 1.5rem; }
+        .control-group { background: var(--surface); padding: 0.75rem 1rem; border-radius: 12px; box-shadow: 0 12px 24px rgba(15,23,42,.06); display: flex; gap: .5rem; align-items: center; }
+        .control-group label { font-weight: 600; color: var(--gray-600); }
+        .control-group select { border: 0; background: transparent; font-weight: 600; color: var(--gray-900); }
+        .bestsellers-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.25rem; }
+        .bestseller-card { background: var(--surface); border-radius: 16px; padding: 0.9rem; box-shadow: 0 18px 30px rgba(15,23,42,.08); display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; grid-template-areas: 'rank title' 'cover meta'; column-gap: .9rem; align-items: center; }
+        .bestseller-card .bestseller-rank { grid-area: rank; font-weight: 800; color: var(--brand-600); font-size: 1.1rem; }
+        .bestseller-card .bestseller-cover { grid-area: cover; }
+        .bestseller-card .bestseller-cover img { width: 120px; aspect-ratio: 3/4; border-radius: 12px; object-fit: cover; box-shadow: 0 14px 22px rgba(15,23,42,.12); }
+        .bestseller-card .bestseller-info { grid-area: meta; }
+        .bestseller-card .bestseller-title { margin: 0; font-size: 1rem; color: var(--gray-900); grid-area: title; }
+        .bestseller-card .bestseller-title a { color: inherit; text-decoration: none; }
+        .bestseller-card .bestseller-title a:hover { text-decoration: underline; }
+        .bestseller-card .bestseller-meta { margin: .35rem 0 0; color: var(--gray-600); font-size: .95rem; }
+        .bestsellers-empty { text-align: center; color: var(--gray-600); padding: 2rem 0; }
+
+        /* Skeleton state */
+        .bestseller-card.is-loading { display: grid; grid-template-columns: 1fr 2fr; grid-template-areas: 'cover info'; gap: 1rem; animation: pulse 1.2s ease-in-out infinite; }
+        .bestseller-card.is-loading .bestseller-rank { display: none; }
+        .bestseller-card.is-loading .bestseller-cover { grid-area: cover; width: 120px; height: 160px; border-radius: 12px; background: var(--gray-200); }
+        .bestseller-card.is-loading .bestseller-info { grid-area: info; }
+        .bestseller-card.is-loading .line { height: 12px; background: var(--gray-200); border-radius: 6px; }
+        .bestseller-card.is-loading .line-1 { width: 70%; margin-bottom: .5rem; }
+        .bestseller-card.is-loading .line-2 { width: 50%; }
+
+        @@keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: .6; }
+            100% { opacity: 1; }
         }
     </style>
 }

@@ -16,11 +16,18 @@ namespace BookWise.Web.Pages
     {
         private readonly BookWiseContext _context;
         private readonly IAvatarCacheService _avatarCacheService;
+        private readonly BookWise.Web.Services.Recommendations.IDeepSeekRecommendationClient _deepSeek;
 
-        public ExploreModel(BookWiseContext context, IAvatarCacheService avatarCacheService)
+        // Explore page tuning knobs
+        private const int MaxRecentQuotes = 200;
+        private const int MaxQuoteGroups = 8;
+        private const int MaxQuotesPerGroup = 4;
+
+        public ExploreModel(BookWiseContext context, IAvatarCacheService avatarCacheService, BookWise.Web.Services.Recommendations.IDeepSeekRecommendationClient deepSeek)
         {
             _context = context;
             _avatarCacheService = avatarCacheService;
+            _deepSeek = deepSeek;
         }
 
         public IReadOnlyList<AuthorProfile> Authors { get; private set; } = Array.Empty<AuthorProfile>();
@@ -160,7 +167,9 @@ namespace BookWise.Web.Pages
                 // For external URLs (like Douban), use the cache service
                 if (originalUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
-                    return await _avatarCacheService.GetCachedAvatarUrlAsync(originalUrl, cancellationToken);
+                    // Important: do NOT trigger a network fetch during initial page render.
+                    // Only return a cached URL if available; otherwise fall back to placeholder.
+                    return await _avatarCacheService.TryGetCachedAvatarUrlAsync(originalUrl);
                 }
 
                 // For local URLs, return as-is
@@ -208,37 +217,106 @@ namespace BookWise.Web.Pages
 
         private async Task<IReadOnlyList<RecommendedSeriesItem>> LoadRecommendedSeriesAsync(CancellationToken cancellationToken)
         {
-            // For now, return empty list as there's no data source for series recommendations
-            await Task.CompletedTask;
-            return Array.Empty<RecommendedSeriesItem>();
+            var titles = await _context.Books
+                .AsNoTracking()
+                .Where(b => b.Status == "reading" || b.Status == "read")
+                .OrderBy(b => b.Title)
+                .Select(b => b.Title)
+                .ToListAsync(cancellationToken);
+
+            if (titles.Count == 0)
+            {
+                return Array.Empty<RecommendedSeriesItem>();
+            }
+
+            try
+            {
+                var suggestions = await _deepSeek.GetRecommendedSeriesAsync(titles, cancellationToken);
+                if (suggestions.Count == 0)
+                {
+                    return Array.Empty<RecommendedSeriesItem>();
+                }
+
+                return suggestions
+                    .Select(s => new RecommendedSeriesItem
+                    {
+                        Title = s.Title,
+                        Installment = s.Installment,
+                        CoverUrl = string.IsNullOrWhiteSpace(s.CoverUrl) ? "/img/book-placeholder.svg" : s.CoverUrl!
+                    })
+                    .ToList();
+            }
+            catch
+            {
+                return Array.Empty<RecommendedSeriesItem>();
+            }
         }
 
         private async Task<IReadOnlyList<RecommendedAdaptation>> LoadRecommendedAdaptationsAsync(CancellationToken cancellationToken)
         {
-            // For now, return empty list as there's no data source for adaptation recommendations
-            await Task.CompletedTask;
-            return Array.Empty<RecommendedAdaptation>();
+            var titles = await _context.Books
+                .AsNoTracking()
+                .Where(b => b.Status == "reading" || b.Status == "read")
+                .OrderBy(b => b.Title)
+                .Select(b => b.Title)
+                .ToListAsync(cancellationToken);
+
+            if (titles.Count == 0)
+            {
+                return Array.Empty<RecommendedAdaptation>();
+            }
+
+            try
+            {
+                var suggestions = await _deepSeek.GetRecommendedAdaptationsAsync(titles, cancellationToken);
+                if (suggestions.Count == 0)
+                {
+                    return Array.Empty<RecommendedAdaptation>();
+                }
+
+                return suggestions
+                    .Select(s => new RecommendedAdaptation
+                    {
+                        Title = s.Title,
+                        Type = s.Type,
+                        ImageUrl = string.IsNullOrWhiteSpace(s.ImageUrl) ? "/img/book-placeholder.svg" : s.ImageUrl!
+                    })
+                    .ToList();
+            }
+            catch
+            {
+                return Array.Empty<RecommendedAdaptation>();
+            }
         }
 
         private async Task<(QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteGroup> Groups)> LoadQuotesAsync(CancellationToken cancellationToken)
         {
-            var quoteEntities = await _context.BookQuotes
+            // Load a bounded set of the most recent quotes, projecting only required fields
+            var quotes = await _context.BookQuotes
                 .AsNoTracking()
-                .Include(q => q.Book)
+                .OrderByDescending(q => q.AddedOn)
+                .Take(MaxRecentQuotes)
+                .Select(q => new
+                {
+                    q.Text,
+                    q.Author,
+                    q.Source,
+                    q.BackgroundImageUrl,
+                    q.AddedOn,
+                    q.BookId,
+                    BookTitle = q.Book != null ? q.Book.Title : null,
+                    BookAuthor = q.Book != null ? q.Book.Author : null,
+                    BookCover = q.Book != null ? q.Book.CoverImageUrl : null
+                })
                 .ToListAsync(cancellationToken);
 
-            if (quoteEntities.Count == 0)
+            if (quotes.Count == 0)
             {
                 return (QuoteCard.Empty, Array.Empty<QuoteGroup>());
             }
 
-            // Order by AddedOn on the client side to avoid SQLite DateTimeOffset ordering issues
-            quoteEntities = quoteEntities
-                .OrderByDescending(q => q.AddedOn)
-                .ToList();
-
             // Quote of the day is the most recent one
-            var first = quoteEntities[0];
+            var first = quotes[0];
             var quoteOfTheDay = new QuoteCard
             {
                 Text = first.Text,
@@ -246,20 +324,21 @@ namespace BookWise.Web.Pages
                 Source = first.Source,
                 BackgroundImageUrl = !string.IsNullOrWhiteSpace(first.BackgroundImageUrl)
                     ? first.BackgroundImageUrl
-                    : string.IsNullOrWhiteSpace(first.Book?.CoverImageUrl) ? null : first.Book?.CoverImageUrl
+                    : string.IsNullOrWhiteSpace(first.BookCover) ? null : first.BookCover
             };
 
             // Group the rest by book for a clearer browsing experience
-            var groups = quoteEntities
+            var groups = quotes
                 .Skip(1)
                 .GroupBy(q => new
                 {
                     q.BookId,
-                    Title = q.Book?.Title ?? "Unknown Book",
-                    Author = q.Book?.Author ?? "Unknown Author",
-                    Cover = string.IsNullOrWhiteSpace(q.Book?.CoverImageUrl) ? "/img/book-placeholder.svg" : q.Book!.CoverImageUrl
+                    Title = string.IsNullOrWhiteSpace(q.BookTitle) ? "Unknown Book" : q.BookTitle,
+                    Author = string.IsNullOrWhiteSpace(q.BookAuthor) ? "Unknown Author" : q.BookAuthor,
+                    Cover = string.IsNullOrWhiteSpace(q.BookCover) ? "/img/book-placeholder.svg" : q.BookCover!
                 })
                 .OrderByDescending(g => g.Max(q => q.AddedOn))
+                .Take(MaxQuoteGroups)
                 .Select(g => new QuoteGroup
                 {
                     BookTitle = g.Key.Title,
@@ -267,6 +346,7 @@ namespace BookWise.Web.Pages
                     CoverImageUrl = g.Key.Cover!,
                     Quotes = g
                         .OrderByDescending(q => q.AddedOn)
+                        .Take(MaxQuotesPerGroup)
                         .Select(q => new QuoteCard
                         {
                             Text = q.Text,
@@ -274,7 +354,7 @@ namespace BookWise.Web.Pages
                             Source = q.Source,
                             BackgroundImageUrl = !string.IsNullOrWhiteSpace(q.BackgroundImageUrl)
                                 ? q.BackgroundImageUrl
-                                : string.IsNullOrWhiteSpace(q.Book?.CoverImageUrl) ? null : q.Book?.CoverImageUrl
+                                : string.IsNullOrWhiteSpace(q.BookCover) ? null : q.BookCover
                         })
                         .ToList()
                 })

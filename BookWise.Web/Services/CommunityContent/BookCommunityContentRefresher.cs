@@ -321,7 +321,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                         // avatarSource = "douban-personage";
                     }
 
-                    // Extract profile summary
+                    // Extract profile summary (prefer the explicit 人物简介/作者简介 section)
                     var summaryNode = document.DocumentNode
                         .SelectSingleNode("//div[@class='bd']/div[@class='intro']") ??
                         document.DocumentNode
@@ -330,6 +330,48 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                     if (!string.IsNullOrWhiteSpace(rawSummary))
                     {
                         summary = NormalizeWhitespace(HtmlEntity.DeEntitize(rawSummary));
+                    }
+                    
+                    if (string.IsNullOrWhiteSpace(summary))
+                    {
+                        // Look for a module whose header explicitly says 人物简介 or 作者简介
+                        var introModule = document.DocumentNode.SelectSingleNode(
+                            "//div[contains(@class,'mod')][.//h2[contains(normalize-space(.),'人物简介') or contains(normalize-space(.),'作者简介')]]");
+                        if (introModule is not null)
+                        {
+                            var introCandidates = introModule.SelectNodes(".//div[contains(@class,'bd')]//*[self::div[contains(@class,'intro')] or self::p]");
+                            if (introCandidates is not null && introCandidates.Count > 0)
+                            {
+                                var pieces = introCandidates
+                                    .Select(n => NormalizeWhitespace(HtmlEntity.DeEntitize(n.InnerText)))
+                                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                                    .ToList();
+                                if (pieces.Count > 0)
+                                {
+                                    summary = string.Join(" ", pieces);
+                                }
+                            }
+                            else
+                            {
+                                // Fallback: any text under the module body
+                                var body = introModule.SelectSingleNode(".//div[contains(@class,'bd')]");
+                                var text = body?.InnerText;
+                                if (!string.IsNullOrWhiteSpace(text))
+                                {
+                                    summary = NormalizeWhitespace(HtmlEntity.DeEntitize(text));
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (string.IsNullOrWhiteSpace(summary))
+                    {
+                        // Final fallback on personage page: og:description
+                        var ogDesc = document.DocumentNode.SelectSingleNode("//meta[@property='og:description']")?.GetAttributeValue("content", null);
+                        if (!string.IsNullOrWhiteSpace(ogDesc))
+                        {
+                            summary = NormalizeWhitespace(HtmlEntity.DeEntitize(ogDesc));
+                        }
                     }
 
                     // Extract notable works
