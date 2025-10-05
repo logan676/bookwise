@@ -87,6 +87,7 @@ namespace BookWise.Web.Pages
                     Quote,
                     CoverImageUrl,
                     Category,
+                    Publisher: null, // Not supported in this form
                     ISBN,
                     DoubanSubjectId: null, // Not supported in this form
                     Status,

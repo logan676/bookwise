@@ -31,6 +31,9 @@ public class Book
     [MaxLength(100)]
     public string? Category { get; set; }
 
+    [MaxLength(200)]
+    public string? Publisher { get; set; }
+
     [MaxLength(500)]
     public string? Quote { get; set; }
 

@@ -3,6 +3,7 @@ using System;
 using BookWise.Web.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BookWise.Web.Migrations
 {
     [DbContext(typeof(BookWiseContext))]
-    partial class BookWiseContextModelSnapshot : ModelSnapshot
+    [Migration("20251005052609_AddPublisherColumn")]
+    partial class AddPublisherColumn
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.9");
@@ -188,10 +191,6 @@ namespace BookWise.Web.Migrations
 
                     b.Property<decimal?>("PublicRating")
                         .HasPrecision(2, 1)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Publisher")
-                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Quote")

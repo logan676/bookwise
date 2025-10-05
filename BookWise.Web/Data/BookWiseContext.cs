@@ -40,6 +40,7 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
             entity.Property(b => b.DoubanSubjectId)
                 .HasMaxLength(32);
             entity.Property(b => b.Quote).HasMaxLength(500);
+            entity.Property(b => b.Publisher).HasMaxLength(200);
 
             entity.HasIndex(b => new { b.Title, b.AuthorId });
 

@@ -393,6 +393,7 @@
                 description = '',
                 cover = '',
                 category = '',
+                publisher = '',
                 quote = '',
                 isbn = '',
                 doubanSubjectId = '',
@@ -412,6 +413,7 @@
                 description: toNullable(description),
                 coverImageUrl: toNullable(cover),
                 category: toNullable(category),
+                publisher: toNullable(publisher),
                 quote: toNullable(quote),
                 isbn: toNullable(isbn),
                 doubanSubjectId: toNullable(doubanSubjectId),
@@ -645,6 +647,7 @@
                 Quote: sanitizeOptionalText(book.quote, 500),
                 CoverImageUrl: sanitizeOptionalText(book.coverImageUrl, 500),
                 Category: sanitizeOptionalText(book.category, 100),
+                Publisher: sanitizeOptionalText(book.publisher, 200),
                 Isbn: sanitizeOptionalText(book.isbn, 20),
                 DoubanSubjectId: sanitizeOptionalText(book.doubanSubjectId, 32),
                 Status: normalizedStatus,
@@ -867,6 +870,7 @@
                 const safeDescription = sanitizeOptionalText(book.description || book.Description, 2000);
                 const safeQuote = sanitizeOptionalText(book.quote || book.Quote, 500);
                 const safeCategory = sanitizeOptionalText(book.category || book.Category, 100);
+                const safePublisher = sanitizeOptionalText(book.publisher || book.Publisher, 200);
                 const safeIsbn = sanitizeOptionalText(book.isbn || book.Isbn, 20);
                 const safeCover = sanitizeOptionalText(book.coverImageUrl || book.CoverImageUrl, 500);
                 const doubanSubjectId = sanitizeOptionalText(book.doubanSubjectId || book.DoubanSubjectId, 32);
@@ -886,6 +890,17 @@
                                 <path d="M4 7v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8"/>
                             </svg>
                             ${escapeHtml(safeCategory)}
+                        </span>
+                    `);
+                }
+
+                if (safePublisher) {
+                    metadataBadges.push(`
+                        <span class="book-badge book-badge--publisher">
+                            <svg class="book-badge-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 21h18M5 21V7l8-4v18M19 21V9l-6-2"/>
+                            </svg>
+                            ${escapeHtml(safePublisher)}
                         </span>
                     `);
                 }
@@ -966,6 +981,7 @@
                 const initialCover = cover || placeholderCover;
                 const descriptionData = escapeAttribute(safeDescription ?? '');
                 const categoryData = escapeAttribute(safeCategory ?? '');
+                const publisherData = escapeAttribute(safePublisher ?? '');
                 const quoteData = escapeAttribute(safeQuote ?? '');
                 const isbnData = escapeAttribute(safeIsbn ?? '');
                 const doubanSubjectIdData = escapeAttribute(doubanSubjectId ?? '');
@@ -1000,6 +1016,7 @@
                                 data-description="${descriptionData}"
                                 data-cover="${coverData}"
                                 data-category="${categoryData}"
+                                data-publisher="${publisherData}"
                                 data-quote="${quoteData}"
                                 data-isbn="${isbnData}"
                                 data-douban-subject-id="${doubanSubjectIdData}"

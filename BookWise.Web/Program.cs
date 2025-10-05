@@ -265,12 +265,13 @@ books.MapPost("", async (
         var normalizedRequest = request.WithNormalizedData();
 
         logger.LogInformation(
-            "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
+            "[{OperationId}] Creating book with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', publisher='{Publisher}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}, remarks={RemarksCount}",
             operationId,
             normalizedRequest.Title,
             normalizedRequest.Author,
             normalizedRequest.Status,
             normalizedRequest.Category,
+            normalizedRequest.Publisher,
             normalizedRequest.Isbn ?? "N/A",
             normalizedRequest.PersonalRating,
             normalizedRequest.PublicRating,
@@ -332,13 +333,14 @@ books.MapPut("/{id:int}", async (int id, UpdateBookRequest request, BookWiseCont
     var normalizedRequest = request.WithNormalizedData();
 
     logger.LogInformation(
-        "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}",
+        "[{OperationId}] Updating book {Id} with payload: title='{Title}', author='{Author}', status='{Status}', category='{Category}', publisher='{Publisher}', isbn='{Isbn}', personalRating={PersonalRating}, publicRating={PublicRating}, favorite={Favorite}, quoteProvided={HasQuote}",
         operationId,
         id,
         normalizedRequest.Title,
         normalizedRequest.Author,
         normalizedRequest.Status,
         normalizedRequest.Category,
+        normalizedRequest.Publisher,
         normalizedRequest.Isbn ?? "N/A",
         normalizedRequest.PersonalRating,
         normalizedRequest.PublicRating,
@@ -487,6 +489,7 @@ record CreateBookRequest(
     [property: MaxLength(500)] string? Quote,
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
+    [property: MaxLength(200)] string? Publisher,
     [property: MaxLength(20)] string? Isbn,
     [property: MaxLength(32)] string? DoubanSubjectId,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
@@ -509,6 +512,7 @@ record CreateBookRequest(
             Quote = TrimToLength(Quote, 500),
             CoverImageUrl = TrimToLength(CoverImageUrl, 500),
             Category = TrimToLength(Category, 100),
+            Publisher = TrimToLength(Publisher, 200),
             Isbn = NormalizeIsbn(Isbn),
             DoubanSubjectId = NormalizeDoubanSubjectId(DoubanSubjectId),
             Status = NormalizeStatus(Status),
@@ -536,6 +540,7 @@ record CreateBookRequest(
         var normalizedQuote = TrimToLength(Quote, 500);
         var normalizedCover = TrimToLength(CoverImageUrl, 500);
         var normalizedCategory = TrimToLength(Category, 100);
+        var normalizedPublisher = TrimToLength(Publisher, 200);
         var normalizedIsbn = NormalizeIsbn(Isbn);
         var normalizedDoubanSubjectId = NormalizeDoubanSubjectId(DoubanSubjectId);
         var normalizedStatus = NormalizeStatus(Status);
@@ -551,6 +556,7 @@ record CreateBookRequest(
             Quote = normalizedQuote,
             CoverImageUrl = normalizedCover,
             Category = normalizedCategory,
+            Publisher = normalizedPublisher,
             ISBN = normalizedIsbn,
             DoubanSubjectId = normalizedDoubanSubjectId,
             Status = normalizedStatus,
@@ -936,6 +942,7 @@ record UpdateBookRequest(
     [property: MaxLength(500)] string? Quote,
     [property: MaxLength(500), Url] string? CoverImageUrl,
     [property: MaxLength(100)] string? Category,
+    [property: MaxLength(200)] string? Publisher,
     [property: MaxLength(20)] string? Isbn,
     [property: MaxLength(32)] string? DoubanSubjectId,
     [property: Required, RegularExpression("^(plan-to-read|reading|read)$", ErrorMessage = "Status must be plan-to-read, reading, or read.")] string Status,
@@ -953,6 +960,7 @@ record UpdateBookRequest(
         Quote = CreateBookRequest.TrimToLength(Quote, 500),
         CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500),
         Category = CreateBookRequest.TrimToLength(Category, 100),
+        Publisher = CreateBookRequest.TrimToLength(Publisher, 200),
         Isbn = CreateBookRequest.NormalizeIsbn(Isbn),
         DoubanSubjectId = CreateBookRequest.NormalizeDoubanSubjectId(DoubanSubjectId),
         Status = NormalizeStatus(Status),
@@ -982,6 +990,7 @@ record UpdateBookRequest(
         book.Quote = CreateBookRequest.TrimToLength(Quote, 500);
         book.CoverImageUrl = CreateBookRequest.TrimToLength(CoverImageUrl, 500);
         book.Category = CreateBookRequest.TrimToLength(Category, 100);
+        book.Publisher = CreateBookRequest.TrimToLength(Publisher, 200);
         book.ISBN = CreateBookRequest.NormalizeIsbn(Isbn);
         book.DoubanSubjectId = CreateBookRequest.NormalizeDoubanSubjectId(DoubanSubjectId);
         book.Status = NormalizeStatus(Status);
@@ -1026,6 +1035,7 @@ record BookSuggestion(
     string? Description,
     string? Quote,
     string? Category,
+    string? Publisher,
     string? Isbn,
     decimal? Rating,
     string? Published,
@@ -1377,6 +1387,7 @@ static class DoubanBookSearch
                 description,
                 quote,
                 category,
+                null, // publisher not available from suggestion endpoint
                 isbn,
                 rating,
                 string.IsNullOrWhiteSpace(published) ? null : published,
@@ -1425,6 +1436,7 @@ static class DoubanBookSearch
         var isbn = CreateBookRequest.NormalizeIsbn(GetInfoValue(document, "ISBN"));
         var quote = ExtractQuote(document);
         var category = InferCategory(document, title, description);
+        var publisher = ExtractPublisher(document);
         var rating = ParseRating(document);
 
         var sanitizedTitle = string.IsNullOrWhiteSpace(title) ? "Untitled" : HtmlEntity.DeEntitize(title);
@@ -1432,6 +1444,7 @@ static class DoubanBookSearch
         var sanitizedDescription = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(description) ? null : HtmlEntity.DeEntitize(description), 2000);
         var sanitizedQuote = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(quote) ? null : HtmlEntity.DeEntitize(quote), 500);
         var sanitizedCategory = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(category) ? null : HtmlEntity.DeEntitize(category), 100);
+        var sanitizedPublisher = CreateBookRequest.TrimToLength(string.IsNullOrWhiteSpace(publisher) ? null : HtmlEntity.DeEntitize(publisher), 200);
         var sanitizedPublished = string.IsNullOrWhiteSpace(published) ? null : HtmlEntity.DeEntitize(published);
         var sanitizedLanguage = string.IsNullOrWhiteSpace(language) ? null : HtmlEntity.DeEntitize(language);
         var sanitizedCover = string.IsNullOrWhiteSpace(cover) ? null : NormalizeCoverUrl(cover);
@@ -1442,6 +1455,7 @@ static class DoubanBookSearch
             sanitizedDescription,
             sanitizedQuote,
             sanitizedCategory,
+            sanitizedPublisher,
             string.IsNullOrWhiteSpace(isbn) ? null : isbn,
             rating,
             sanitizedPublished,
@@ -1546,13 +1560,30 @@ static class DoubanBookSearch
             }
         }
 
-        var publisherCandidate = SanitizeCategory(GetInfoValue(document, "出版社"));
+        // Removed publisher fallbacks - those should go in the Publisher field instead
+        return null;
+    }
+
+    private static string? ExtractPublisher(HtmlDocument document)
+    {
+        static string? SanitizePublisher(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            var normalized = NormalizeWhitespace(value);
+            return CreateBookRequest.TrimToLength(normalized, 200);
+        }
+
+        var publisherCandidate = SanitizePublisher(GetInfoValue(document, "出版社"));
         if (publisherCandidate is not null)
         {
             return publisherCandidate;
         }
 
-        var producerCandidate = SanitizeCategory(GetInfoValue(document, "出品方"));
+        var producerCandidate = SanitizePublisher(GetInfoValue(document, "出品方"));
         if (producerCandidate is not null)
         {
             return producerCandidate;
