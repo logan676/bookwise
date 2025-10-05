@@ -136,6 +136,14 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             // Update author profile information
             author.ProfileSummary = CreateBookRequest.TrimToLength(profile.Summary, 2000);
             author.ProfileNotableWorks = CreateBookRequest.TrimToLength(profile.NotableWorks, 1000);
+            
+            // Update avatar URL if we found a valid one from Douban
+            if (!string.IsNullOrWhiteSpace(profile.AvatarUrl))
+            {
+                author.AvatarUrl = profile.AvatarUrl;
+                _logger.LogInformation("Updated avatar URL for author {AuthorName} to {AvatarUrl}", author.Name, profile.AvatarUrl);
+            }
+            
             author.ProfileRefreshedAt = DateTimeOffset.UtcNow;
             author.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -165,18 +173,52 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             var document = new HtmlDocument();
             document.LoadHtml(html);
 
-            // Look for author link in the book details
-            var authorLink = document.DocumentNode
-                .SelectSingleNode("//span[text()='作者:']/following-sibling::a[1]/@href");
-
-            if (authorLink?.GetAttributeValue("href", "") is string href && !string.IsNullOrEmpty(href))
+            // Try multiple selectors to find an anchor element for the author/personage
+            var authorLinkSelectors = new[]
             {
-                // Extract ID from URL like https://book.douban.com/author/27557670/
-                var match = System.Text.RegularExpressions.Regex.Match(href, @"/author/(\d+)/");
-                if (match.Success)
+                "//div[@id='info']//span[@class='pl' and (text()='作者:' or text()='作者：' or text()='作者')]/following-sibling::a[1]",
+                "//div[@id='info']//a[contains(@href,'/author/') or contains(@href,'/personage/')][1]"
+            };
+
+            string? authorHref = null;
+            foreach (var selector in authorLinkSelectors)
+            {
+                var anchor = document.DocumentNode.SelectSingleNode(selector);
+                if (anchor != null)
                 {
-                    return match.Groups[1].Value;
+                    authorHref = anchor.GetAttributeValue("href", null);
+                    if (!string.IsNullOrWhiteSpace(authorHref))
+                    {
+                        break;
+                    }
                 }
+            }
+
+            if (!string.IsNullOrWhiteSpace(authorHref))
+            {
+                // Extract ID from different URL patterns:
+                // https://book.douban.com/author/27557670/
+                // https://www.douban.com/personage/36696520/
+                // /author/27557670/
+                // /personage/36696520/
+                var patterns = new[]
+                {
+                    @"/(?:author|personage)/(\d+)/?",
+                    @"douban\.com/(?:author|personage)/(\d+)/?"
+                };
+
+                foreach (var pattern in patterns)
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(authorHref, pattern);
+                    if (match.Success)
+                    {
+                        var authorId = match.Groups[1].Value;
+                        _logger.LogInformation("Extracted author Douban ID {AuthorId} from URL {AuthorHref}", authorId, authorHref);
+                        return authorId;
+                    }
+                }
+                
+                _logger.LogWarning("Found author link {AuthorHref} but could not extract ID", authorHref);
             }
 
             return null;
@@ -192,49 +234,70 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
     {
         try
         {
-            // Create a new client for author pages since they might be on a different subdomain
+            // Create a new client for author/person pages since they might be on a different subdomain
             using var authorClient = _httpClientFactory.CreateClient();
-            authorClient.BaseAddress = new Uri("https://www.douban.com/");
             authorClient.Timeout = TimeSpan.FromSeconds(10);
             authorClient.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 (+https://bookwise.local)");
 
-            using var response = await authorClient.GetAsync($"personage/{authorId}/", cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            string? avatarUrl = null;
+            string? summary = null;
+            string? worksText = null;
+
+            // Prefer the personage page for richer profile data
+            authorClient.BaseAddress = new Uri("https://www.douban.com/");
+            using (var response = await authorClient.GetAsync($"personage/{authorId}/", cancellationToken))
             {
-                return null;
+                if (response.IsSuccessStatusCode)
+                {
+                    var html = await response.Content.ReadAsStringAsync(cancellationToken);
+                    var document = new HtmlDocument();
+                    document.LoadHtml(html);
+
+                    // Use og:image as primary avatar source
+                    var ogImage = document.DocumentNode.SelectSingleNode("//meta[@property='og:image']")?.GetAttributeValue("content", null);
+                    avatarUrl = NormalizeAvatarUrl(ogImage);
+
+                    // Extract profile summary
+                    var summaryNode = document.DocumentNode
+                        .SelectSingleNode("//div[@class='bd']/div[@class='intro']") ??
+                        document.DocumentNode
+                        .SelectSingleNode("//div[@class='intro']");
+                    var rawSummary = summaryNode?.InnerText;
+                    if (!string.IsNullOrWhiteSpace(rawSummary))
+                    {
+                        summary = NormalizeWhitespace(HtmlEntity.DeEntitize(rawSummary));
+                    }
+
+                    // Extract notable works
+                    var worksNodes = document.DocumentNode.SelectNodes("//div[@class='works']//li/a");
+                    var notableWorks = worksNodes?
+                        .Take(5)
+                        .Select(node => NormalizeWhitespace(HtmlEntity.DeEntitize(node.InnerText)))
+                        .Where(work => !string.IsNullOrWhiteSpace(work))
+                        .ToList();
+                    if (notableWorks is not null && notableWorks.Count > 0)
+                    {
+                        worksText = string.Join(", ", notableWorks);
+                    }
+                }
             }
 
-            var html = await response.Content.ReadAsStringAsync(cancellationToken);
-            var document = new HtmlDocument();
-            document.LoadHtml(html);
-
-            // Extract profile summary
-            var summaryNode = document.DocumentNode
-                .SelectSingleNode("//div[@class='bd']/div[@class='intro']") ??
-                document.DocumentNode
-                .SelectSingleNode("//div[@class='intro']");
-            
-            var summary = summaryNode?.InnerText;
-            if (!string.IsNullOrWhiteSpace(summary))
+            // Fallback: try author page on book.douban.com if we still don't have an avatar
+            if (string.IsNullOrWhiteSpace(avatarUrl))
             {
-                summary = NormalizeWhitespace(HtmlEntity.DeEntitize(summary));
+                authorClient.BaseAddress = new Uri("https://book.douban.com/");
+                using var response2 = await authorClient.GetAsync($"author/{authorId}/", cancellationToken);
+                if (response2.IsSuccessStatusCode)
+                {
+                    var html2 = await response2.Content.ReadAsStringAsync(cancellationToken);
+                    var document2 = new HtmlDocument();
+                    document2.LoadHtml(html2);
+                    var ogImage2 = document2.DocumentNode.SelectSingleNode("//meta[@property='og:image']")?.GetAttributeValue("content", null);
+                    avatarUrl = NormalizeAvatarUrl(ogImage2);
+                }
             }
 
-            // Extract notable works
-            var worksNodes = document.DocumentNode
-                .SelectNodes("//div[@class='works']//li/a");
-            
-            var notableWorks = worksNodes?
-                .Take(5) // Top 5 works
-                .Select(node => NormalizeWhitespace(HtmlEntity.DeEntitize(node.InnerText)))
-                .Where(work => !string.IsNullOrWhiteSpace(work))
-                .ToList();
-
-            var worksText = notableWorks?.Count > 0 
-                ? string.Join(", ", notableWorks)
-                : null;
-
-            return new AuthorProfile(summary, worksText);
+            return new AuthorProfile(summary, worksText, avatarUrl);
         }
         catch (Exception ex)
         {
@@ -467,5 +530,28 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
 
     private sealed record CommunityRemark(string Content, string? Title);
 
-    private sealed record AuthorProfile(string? Summary, string? NotableWorks);
+    private static string? NormalizeAvatarUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var trimmed = url.Trim();
+        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = "https://" + trimmed[7..];
+        }
+
+        // Upgrade known Douban avatar sizes if possible
+        if (trimmed.Contains("/view/personage/", StringComparison.OrdinalIgnoreCase))
+        {
+            trimmed = trimmed.Replace("/personage/m/", "/personage/l/", StringComparison.OrdinalIgnoreCase)
+                             .Replace("/personage/s/", "/personage/l/", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return trimmed;
+    }
+
+    private sealed record AuthorProfile(string? Summary, string? NotableWorks, string? AvatarUrl);
 }
