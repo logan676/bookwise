@@ -112,12 +112,7 @@ public static class AuthorResolver
 
     private static string BuildDefaultAvatarUrl(string name)
     {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return "https://i.pravatar.cc/160?img=1";
-        }
-
-        var identifier = Uri.EscapeDataString(name.Trim().ToLowerInvariant());
-        return $"https://i.pravatar.cc/160?u={identifier}";
+        // Use a neutral local placeholder; Douban avatar will override after community refresh.
+        return "/img/book-placeholder.svg";
     }
 }

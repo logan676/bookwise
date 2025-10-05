@@ -218,12 +218,8 @@
         };
 
         const buildDefaultAuthorAvatar = (name) => {
-            if (typeof name !== 'string' || !name.trim()) {
-                return 'https://i.pravatar.cc/160?img=1';
-            }
-
-            const identifier = encodeURIComponent(name.trim().toLowerCase());
-            return `https://i.pravatar.cc/160?u=${identifier}`;
+            // Avoid external avatar placeholders; Douban parsing will update later.
+            return null;
         };
 
         initializeStatusOptions();

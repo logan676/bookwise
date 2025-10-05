@@ -74,7 +74,9 @@ namespace BookWise.Web.Pages
                         Slug = GenerateSlug(author.Name),
                         Name = author.Name,
                         Summary = BuildAuthorSummary(works),
-                        PhotoUrl = BuildAuthorAvatarUrl(author.Name),
+                        PhotoUrl = string.IsNullOrWhiteSpace(author.AvatarUrl)
+                            ? "/img/book-placeholder.svg"
+                            : author.AvatarUrl!,
                         WorkCount = works.Count,
                         Library = libraryWorks,
                         AvailableWorks = availableWorks
@@ -174,9 +176,16 @@ namespace BookWise.Web.Pages
                 ? recommendation.Rationale
                 : $"Readers who enjoy {recommendation.FocusAuthor} also like {recommendation.RecommendedAuthor}.";
 
-            var imageUrl = !string.IsNullOrWhiteSpace(recommendation.ImageUrl)
-                ? recommendation.ImageUrl!
-                : BuildAuthorAvatarUrl(recommendation.RecommendedAuthor);
+            var imageUrl = recommendation.ImageUrl;
+            if (string.IsNullOrWhiteSpace(imageUrl))
+            {
+                // Try to use stored avatar for this author if available
+                var existing = _context.Authors.AsNoTracking()
+                    .FirstOrDefault(a => a.Name == recommendation.RecommendedAuthor);
+                imageUrl = string.IsNullOrWhiteSpace(existing?.AvatarUrl)
+                    ? "/img/book-placeholder.svg"
+                    : existing!.AvatarUrl;
+            }
 
             return new RecommendedAuthor
             {
@@ -228,16 +237,7 @@ namespace BookWise.Web.Pages
             return value[..maxLength].TrimEnd() + "...";
         }
 
-        private static string BuildAuthorAvatarUrl(string author)
-        {
-            if (string.IsNullOrWhiteSpace(author))
-            {
-                return "https://i.pravatar.cc/96?img=1";
-            }
-
-            var identifier = Uri.EscapeDataString(author.Trim());
-            return $"https://i.pravatar.cc/96?u={identifier}";
-        }
+        // No pravatar fallback; avatars come from Douban when available.
 
         private static bool IsLibraryStatus(string? status)
         {
