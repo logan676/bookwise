@@ -218,8 +218,8 @@
         };
 
         const buildDefaultAuthorAvatar = (name) => {
-            // Return a valid fully-qualified URL for validation
-            return `${window.location.origin}/img/book-placeholder.svg`;
+            // Do not send a placeholder avatar to the server; let backend resolve/enrich.
+            return null;
         };
 
         initializeStatusOptions();
@@ -657,9 +657,13 @@
                 Status: normalizedStatus,
                 IsFavorite: false,
                 PersonalRating: personalRating,
-                PublicRating: publicRating,
-                AuthorAvatarUrl: avatarUrl
+                PublicRating: publicRating
             };
+
+            // Only include AuthorAvatarUrl if it's a real remote URL
+            if (avatarUrl) {
+                payload.AuthorAvatarUrl = avatarUrl;
+            }
 
             if (extras.remark) {
                 payload.Remarks = [extras.remark];

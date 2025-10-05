@@ -102,17 +102,47 @@ public static class AuthorResolver
         }
 
         var trimmed = value.Trim();
-        if (trimmed.Length > 500)
+
+        // Reject relative/local asset paths (e.g., /img/*.svg) to avoid storing placeholders
+        if (Uri.TryCreate(trimmed, UriKind.Relative, out _))
         {
-            trimmed = trimmed[..500];
+            return null;
         }
 
-        return trimmed;
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        // Treat local static assets as placeholders and ignore
+        if (uri.AbsolutePath.StartsWith("/img/", StringComparison.OrdinalIgnoreCase) &&
+            uri.AbsolutePath.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        // Normalize scheme to https
+        if (uri.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase))
+        {
+            var builder = new UriBuilder(uri)
+            {
+                Scheme = Uri.UriSchemeHttps,
+                Port = -1
+            };
+            uri = builder.Uri;
+        }
+
+        var normalized = uri.ToString();
+        if (normalized.Length > 500)
+        {
+            normalized = normalized[..500];
+        }
+        return normalized;
     }
 
     private static string BuildDefaultAvatarUrl(string name)
     {
         // Use a neutral local placeholder; Douban avatar will override after community refresh.
-        return "/img/book-placeholder.svg";
+        return "/img/author-placeholder.svg";
     }
 }
