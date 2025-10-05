@@ -72,7 +72,8 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<BookWiseContext>();
-    var connectionString = scope.ServiceProvider.GetRequiredService<IConfiguration>().GetConnectionString("DefaultConnection");
+    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var connectionString = configuration.GetConnectionString("DefaultConnection");
     if (!string.IsNullOrWhiteSpace(connectionString))
     {
         var sqliteBuilder = new SqliteConnectionStringBuilder(connectionString);
@@ -87,80 +88,14 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
-    db.Database.Migrate();
-
-    if (!db.Books.Any())
+    // Optionally reset database for a clean start (development only)
+    var resetOnStart = app.Environment.IsDevelopment() && configuration.GetValue<bool>("Database:ResetOnStart");
+    if (resetOnStart)
     {
-        db.Books.AddRange(new[]
-        {
-            CreateSeedBook(
-                title: "Atomic Habits",
-                authorName: "James Clear",
-                description: "An easy & proven way to build good habits and break bad ones.",
-                category: "Self-Improvement",
-                quote: "Habits are the compound interest of self-improvement.",
-                isbn: "9780735211292",
-                publicRating: 4.8m),
-            CreateSeedBook(
-                title: "Project Hail Mary",
-                authorName: "Andy Weir",
-                description: "A lone astronaut must save the earth from disaster in this epic tale.",
-                category: "Science Fiction",
-                quote: "Humanity can solve anything when we act together.",
-                isbn: "9780593135204",
-                publicRating: 4.6m),
-            CreateSeedBook(
-                title: "Clean Code",
-                authorName: "Robert C. Martin",
-                description: "A handbook of agile software craftsmanship.",
-                category: "Software",
-                quote: "Clean code always looks like it was written by someone who cares.",
-                isbn: "9780132350884",
-                publicRating: 4.7m)
-        });
-
-        db.SaveChanges();
+        db.Database.EnsureDeleted();
     }
-}
 
-static Book CreateSeedBook(
-    string title,
-    string authorName,
-    string description,
-    string category,
-    string quote,
-    string isbn,
-    decimal publicRating)
-{
-    var author = new Author
-    {
-        Name = authorName,
-        NormalizedName = AuthorResolver.BuildNormalizedKey(authorName)
-    };
-
-    var book = new Book
-    {
-        Title = title,
-        Author = author.Name,
-        AuthorDetails = author,
-        Category = category,
-        Description = description,
-        Quote = quote,
-        ISBN = isbn,
-        PublicRating = publicRating,
-        Quotes =
-        {
-            new BookQuote
-            {
-                Text = quote,
-                Author = author.Name,
-                Source = title,
-                Origin = BookQuoteSource.Snapshot
-            }
-        }
-    };
-
-    return book;
+    db.Database.Migrate();
 }
 
 if (!app.Environment.IsDevelopment())
