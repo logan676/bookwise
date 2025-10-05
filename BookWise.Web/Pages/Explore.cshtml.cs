@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using BookWise.Web.Data;
 using BookWise.Web.Models;
+using BookWise.Web.Services.Caching;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,10 +15,12 @@ namespace BookWise.Web.Pages
     public class ExploreModel : PageModel
     {
         private readonly BookWiseContext _context;
+        private readonly IAvatarCacheService _avatarCacheService;
 
-        public ExploreModel(BookWiseContext context)
+        public ExploreModel(BookWiseContext context, IAvatarCacheService avatarCacheService)
         {
             _context = context;
+            _avatarCacheService = avatarCacheService;
         }
 
         public IReadOnlyList<AuthorProfile> Authors { get; private set; } = Array.Empty<AuthorProfile>();
@@ -74,73 +77,100 @@ namespace BookWise.Web.Pages
                 return Array.Empty<AuthorProfile>();
             }
 
-            var authorProfiles = authors
-                .Select(a =>
-                {
-                    var works = a.Books
-                        .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
-                        .Select(b => new
-                        {
-                            b.Title,
-                            b.Status,
-                            Subtitle = BuildBookSubtitle(new Book { Category = b.Category, Status = b.Status }),
-                            CoverUrl = string.IsNullOrWhiteSpace(b.CoverImageUrl)
-                                ? "/img/book-placeholder.svg"
-                                : b.CoverImageUrl,
-                            Description = b.Description
-                        })
-                        .ToList();
-
-                    var libraryWorks = works
-                        .Where(w => IsLibraryStatus(w.Status))
-                        .Select(w => new AuthorWork
-                        {
-                            Title = w.Title,
-                            Subtitle = w.Subtitle,
-                            CoverUrl = w.CoverUrl
-                        })
-                        .ToList();
-
-                    var availableWorks = works
-                        .Where(w => !IsLibraryStatus(w.Status))
-                        .Select(w => new AuthorWork
-                        {
-                            Title = w.Title,
-                            Subtitle = w.Subtitle,
-                            CoverUrl = w.CoverUrl
-                        })
-                        .ToList();
-
-                    // Prefer stored profile summary when present
-                    var summary = !string.IsNullOrWhiteSpace(a.ProfileSummary)
-                        ? TrimToLength(a.ProfileSummary!, 200)
-                        : BuildAuthorSummary(
-                            works.Select(w => new Book { Description = w.Description }).ToList()
-                          );
-
-                    return new AuthorProfile
+            var authorProfiles = new List<AuthorProfile>();
+            
+            foreach (var a in authors)
+            {
+                var works = a.Books
+                    .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
+                    .Select(b => new
                     {
-                        Slug = GenerateSlug(a.Name),
-                        Name = a.Name,
-                        Summary = summary,
-                        PhotoUrl = string.IsNullOrWhiteSpace(a.AvatarUrl) ? "/img/book-placeholder.svg" : a.AvatarUrl!,
-                        WorkCount = works.Count,
-                        Library = libraryWorks,
-                        AvailableWorks = availableWorks,
-                        Gender = EmptyToNull(a.ProfileGender),
-                        BirthDate = EmptyToNull(a.ProfileBirthDate),
-                        BirthPlace = EmptyToNull(a.ProfileBirthPlace),
-                        Occupation = EmptyToNull(a.ProfileOccupation),
-                        WebsiteUrl = EmptyToNull(a.ProfileWebsiteUrl),
-                        DoubanProfileUrl = EmptyToNull(a.DoubanProfileUrl),
-                        OtherNames = SplitToList(a.ProfileOtherNames),
-                        NotableWorks = SplitToList(a.ProfileNotableWorks)
-                    };
-                })
-                .OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+                        b.Title,
+                        b.Status,
+                        Subtitle = BuildBookSubtitle(new Book { Category = b.Category, Status = b.Status }),
+                        CoverUrl = string.IsNullOrWhiteSpace(b.CoverImageUrl)
+                            ? "/img/book-placeholder.svg"
+                            : b.CoverImageUrl,
+                        Description = b.Description
+                    })
+                    .ToList();
 
-            return authorProfiles;
+                var libraryWorks = works
+                    .Where(w => IsLibraryStatus(w.Status))
+                    .Select(w => new AuthorWork
+                    {
+                        Title = w.Title,
+                        Subtitle = w.Subtitle,
+                        CoverUrl = w.CoverUrl
+                    })
+                    .ToList();
+
+                var availableWorks = works
+                    .Where(w => !IsLibraryStatus(w.Status))
+                    .Select(w => new AuthorWork
+                    {
+                        Title = w.Title,
+                        Subtitle = w.Subtitle,
+                        CoverUrl = w.CoverUrl
+                    })
+                    .ToList();
+
+                // Prefer stored profile summary when present
+                var summary = !string.IsNullOrWhiteSpace(a.ProfileSummary)
+                    ? TrimToLength(a.ProfileSummary!, 200)
+                    : BuildAuthorSummary(
+                        works.Select(w => new Book { Description = w.Description }).ToList()
+                      );
+
+                // Get cached avatar URL or fallback to placeholder
+                var cachedAvatarUrl = await GetCachedAvatarUrlAsync(a.AvatarUrl, cancellationToken);
+
+                authorProfiles.Add(new AuthorProfile
+                {
+                    Slug = GenerateSlug(a.Name),
+                    Name = a.Name,
+                    Summary = summary,
+                    PhotoUrl = cachedAvatarUrl ?? "/img/author-placeholder.svg",
+                    WorkCount = works.Count,
+                    Library = libraryWorks,
+                    AvailableWorks = availableWorks,
+                    Gender = EmptyToNull(a.ProfileGender),
+                    BirthDate = EmptyToNull(a.ProfileBirthDate),
+                    BirthPlace = EmptyToNull(a.ProfileBirthPlace),
+                    Occupation = EmptyToNull(a.ProfileOccupation),
+                    WebsiteUrl = EmptyToNull(a.ProfileWebsiteUrl),
+                    DoubanProfileUrl = EmptyToNull(a.DoubanProfileUrl),
+                    OtherNames = SplitToList(a.ProfileOtherNames),
+                    NotableWorks = SplitToList(a.ProfileNotableWorks)
+                });
+            }
+
+            return authorProfiles.OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private async Task<string?> GetCachedAvatarUrlAsync(string? originalUrl, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(originalUrl))
+            {
+                return null;
+            }
+
+            try
+            {
+                // For external URLs (like Douban), use the cache service
+                if (originalUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    return await _avatarCacheService.GetCachedAvatarUrlAsync(originalUrl, cancellationToken);
+                }
+
+                // For local URLs, return as-is
+                return originalUrl;
+            }
+            catch (Exception)
+            {
+                // If caching fails, return null to fall back to placeholder
+                return null;
+            }
         }
 
         private async Task<IReadOnlyList<RecommendedAuthor>> LoadRecommendedAuthorsAsync(CancellationToken cancellationToken)

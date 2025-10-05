@@ -11,6 +11,8 @@ using BookWise.Web.Data;
 using BookWise.Web.Models;
 using BookWise.Web.Options;
 using BookWise.Web.Services.Authors;
+using BookWise.Web.Services.Background;
+using BookWise.Web.Services.Caching;
 using BookWise.Web.Services.CommunityContent;
 using BookWise.Web.Services.Recommendations;
 using HtmlAgilityPack;
@@ -27,6 +29,16 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
+// Register avatar cache service with a dedicated HttpClient
+builder.Services.AddHttpClient<IAvatarCacheService, AvatarCacheService>("AvatarCache", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 Avatar Cache (+https://bookwise.local)");
+});
+
+// Add content type provider for serving cached images
+builder.Services.AddSingleton<Microsoft.AspNetCore.StaticFiles.IContentTypeProvider, Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider>();
 
 // Configure JSON serialization options to handle circular references
 builder.Services.ConfigureHttpJsonOptions(options =>
@@ -53,6 +65,9 @@ builder.Services.AddSingleton<BookWise.Web.Services.CommunityContent.BookCommuni
 builder.Services.AddSingleton<BookWise.Web.Services.CommunityContent.IBookCommunityContentScheduler, BookWise.Web.Services.CommunityContent.BookCommunityContentScheduler>();
 builder.Services.AddScoped<BookWise.Web.Services.CommunityContent.IBookCommunityContentRefresher, BookWise.Web.Services.CommunityContent.BookCommunityContentRefresher>();
 builder.Services.AddHostedService<BookWise.Web.Services.CommunityContent.BookCommunityContentWorker>();
+
+// Register avatar cache background service
+builder.Services.AddHostedService<AvatarCacheBackgroundService>();
 builder.Services.AddHttpClient<IDeepSeekRecommendationClient, DeepSeekRecommendationClient>((serviceProvider, client) =>
 {
     var options = serviceProvider.GetRequiredService<IOptions<DeepSeekOptions>>().Value;
@@ -114,6 +129,102 @@ app.UseAuthorization();
 app.MapRazorPages();
 
 var books = app.MapGroup("/api/books");
+var authors = app.MapGroup("/api/authors");
+
+authors.MapPost("/refresh-avatar", async (
+    [FromQuery] string name,
+    BookWiseContext db,
+    BookWise.Web.Services.CommunityContent.IBookCommunityContentScheduler scheduler,
+    ILogger<Program> logger,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(name))
+    {
+        return Results.BadRequest(new { error = "Missing author name" });
+    }
+
+    var trimmed = name.Trim();
+    var normalized = BookWise.Web.Services.Authors.AuthorResolver.BuildNormalizedKey(trimmed);
+
+    var author = await db.Authors
+        .AsNoTracking()
+        .FirstOrDefaultAsync(a => a.NormalizedName == normalized, cancellationToken);
+
+    if (author is null)
+    {
+        logger.LogWarning("[Authors] Refresh avatar requested for unknown author '{Name}'", trimmed);
+        return Results.NotFound(new { error = "Author not found" });
+    }
+
+    var bookWithDouban = await db.Books
+        .AsNoTracking()
+        .Where(b => b.AuthorId == author.Id && b.DoubanSubjectId != null && b.DoubanSubjectId != "")
+        .Select(b => new { b.Id, b.DoubanSubjectId })
+        .FirstOrDefaultAsync(cancellationToken);
+
+    if (bookWithDouban is null)
+    {
+        logger.LogInformation("[Authors] No Douban subject available for author '{Name}', cannot schedule avatar refresh.", author.Name);
+        return Results.Accepted($"/api/authors/photo?name={Uri.EscapeDataString(author.Name)}", new { scheduled = false, reason = "No Douban subject available" });
+    }
+
+    await scheduler.ScheduleFetchAsync(bookWithDouban.Id, bookWithDouban.DoubanSubjectId!, cancellationToken);
+    logger.LogInformation("[Authors] Scheduled avatar/profile refresh for author '{Name}' using book {BookId} (subject {SubjectId}).", author.Name, bookWithDouban.Id, bookWithDouban.DoubanSubjectId);
+    return Results.Accepted($"/api/authors/photo?name={Uri.EscapeDataString(author.Name)}", new { scheduled = true });
+});
+
+authors.MapGet("/photo", async (
+    [FromQuery] string name,
+    BookWiseContext db,
+    IAvatarCacheService avatarCache,
+    ILogger<Program> logger,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(name))
+    {
+        return Results.BadRequest(new { error = "Missing author name" });
+    }
+
+    var trimmed = name.Trim();
+    var normalized = BookWise.Web.Services.Authors.AuthorResolver.BuildNormalizedKey(trimmed);
+
+    var author = await db.Authors
+        .AsNoTracking()
+        .FirstOrDefaultAsync(a => a.NormalizedName == normalized, cancellationToken);
+
+    if (author is null)
+    {
+        return Results.NotFound(new { error = "Author not found" });
+    }
+
+    var original = author.AvatarUrl;
+    if (string.IsNullOrWhiteSpace(original))
+    {
+        return Results.Ok(new { name = author.Name, photoUrl = "/img/author-placeholder.svg", ready = false });
+    }
+
+    if (original.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+    {
+        try
+        {
+            var cached = await avatarCache.GetCachedAvatarUrlAsync(original, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(cached))
+            {
+                return Results.Ok(new { name = author.Name, photoUrl = cached, ready = true });
+            }
+            return Results.Ok(new { name = author.Name, photoUrl = "/img/author-placeholder.svg", ready = false });
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "[Authors] Failed to resolve cached avatar for '{Name}'", author.Name);
+            return Results.Ok(new { name = author.Name, photoUrl = "/img/author-placeholder.svg", ready = false });
+        }
+    }
+
+    // Local URL (may still be a placeholder)
+    var isPlaceholder = original.EndsWith("author-placeholder.svg", StringComparison.OrdinalIgnoreCase);
+    return Results.Ok(new { name = author.Name, photoUrl = original, ready = !isPlaceholder });
+});
 
 books.MapGet("", async ([AsParameters] BookQuery query, BookWiseContext db, ILogger<Program> logger) =>
 {

@@ -25,6 +25,9 @@ BookWise.Web/appsettings.Local.json
 # SQLite local database
 BookWise.Web/Data/bookwise.db*
 
+# Runtime avatar cache (generated images)
+BookWise.Web/wwwroot/cache/
+
 # Coverage
 coverage/
 
