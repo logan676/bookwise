@@ -48,6 +48,15 @@ namespace BookWise.Web.Pages
                 {
                     a.Name,
                     a.AvatarUrl,
+                    a.ProfileSummary,
+                    a.ProfileNotableWorks,
+                    a.ProfileGender,
+                    a.ProfileBirthDate,
+                    a.ProfileBirthPlace,
+                    a.ProfileOccupation,
+                    a.ProfileOtherNames,
+                    a.ProfileWebsiteUrl,
+                    a.DoubanProfileUrl,
                     Books = a.Books.Select(b => new
                     {
                         b.Title,
@@ -102,17 +111,30 @@ namespace BookWise.Web.Pages
                         })
                         .ToList();
 
+                    // Prefer stored profile summary when present
+                    var summary = !string.IsNullOrWhiteSpace(a.ProfileSummary)
+                        ? TrimToLength(a.ProfileSummary!, 200)
+                        : BuildAuthorSummary(
+                            works.Select(w => new Book { Description = w.Description }).ToList()
+                          );
+
                     return new AuthorProfile
                     {
                         Slug = GenerateSlug(a.Name),
                         Name = a.Name,
-                        Summary = BuildAuthorSummary(
-                            works.Select(w => new Book { Description = w.Description }).ToList()
-                        ),
+                        Summary = summary,
                         PhotoUrl = string.IsNullOrWhiteSpace(a.AvatarUrl) ? "/img/book-placeholder.svg" : a.AvatarUrl!,
                         WorkCount = works.Count,
                         Library = libraryWorks,
-                        AvailableWorks = availableWorks
+                        AvailableWorks = availableWorks,
+                        Gender = EmptyToNull(a.ProfileGender),
+                        BirthDate = EmptyToNull(a.ProfileBirthDate),
+                        BirthPlace = EmptyToNull(a.ProfileBirthPlace),
+                        Occupation = EmptyToNull(a.ProfileOccupation),
+                        WebsiteUrl = EmptyToNull(a.ProfileWebsiteUrl),
+                        DoubanProfileUrl = EmptyToNull(a.DoubanProfileUrl),
+                        OtherNames = SplitToList(a.ProfileOtherNames),
+                        NotableWorks = SplitToList(a.ProfileNotableWorks)
                     };
                 })
                 .OrderBy(profile => profile.Name, StringComparer.OrdinalIgnoreCase)
@@ -338,6 +360,28 @@ namespace BookWise.Web.Pages
             return string.IsNullOrWhiteSpace(slug) ? "author" : slug;
         }
 
+        private static string? EmptyToNull(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        private static IReadOnlyList<string> SplitToList(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return Array.Empty<string>();
+            }
+
+            // Support common separators: comma, Chinese comma、顿号, slash, pipe
+            var parts = value
+                .Split(new[] { ',', '，', '、', '/', '|', ';' }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return parts;
+        }
+
 
         public class AuthorProfile
         {
@@ -348,6 +392,16 @@ namespace BookWise.Web.Pages
             public int WorkCount { get; init; }
             public IReadOnlyList<AuthorWork> Library { get; init; } = Array.Empty<AuthorWork>();
             public IReadOnlyList<AuthorWork> AvailableWorks { get; init; } = Array.Empty<AuthorWork>();
+
+            // Extended author profile fields
+            public string? Gender { get; init; }
+            public string? BirthDate { get; init; }
+            public string? BirthPlace { get; init; }
+            public string? Occupation { get; init; }
+            public IReadOnlyList<string> OtherNames { get; init; } = Array.Empty<string>();
+            public IReadOnlyList<string> NotableWorks { get; init; } = Array.Empty<string>();
+            public string? WebsiteUrl { get; init; }
+            public string? DoubanProfileUrl { get; init; }
         }
 
         public class AuthorWork
