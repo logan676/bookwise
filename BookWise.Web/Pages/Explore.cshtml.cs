@@ -25,7 +25,7 @@ namespace BookWise.Web.Pages
 
         public IReadOnlyList<AuthorProfile> Authors { get; private set; } = Array.Empty<AuthorProfile>();
         public QuoteCard QuoteOfTheDay { get; private set; } = QuoteCard.Empty;
-        public IReadOnlyList<QuoteCard> Quotes { get; private set; } = Array.Empty<QuoteCard>();
+        public IReadOnlyList<QuoteGroup> GroupedQuotes { get; private set; } = Array.Empty<QuoteGroup>();
         public IReadOnlyList<RecommendedAuthor> RecommendedAuthors { get; private set; } = Array.Empty<RecommendedAuthor>();
         public IReadOnlyList<RecommendedSeriesItem> RecommendedSeries { get; private set; } = Array.Empty<RecommendedSeriesItem>();
         public IReadOnlyList<RecommendedAdaptation> RecommendedAdaptations { get; private set; } = Array.Empty<RecommendedAdaptation>();
@@ -35,7 +35,7 @@ namespace BookWise.Web.Pages
             ViewData["Title"] = "Explore";
             var cancellationToken = HttpContext.RequestAborted;
             Authors = await LoadAuthorsAsync(cancellationToken);
-            (QuoteOfTheDay, Quotes) = await LoadQuotesAsync(cancellationToken);
+            (QuoteOfTheDay, GroupedQuotes) = await LoadQuotesAsync(cancellationToken);
             RecommendedAuthors = await LoadRecommendedAuthorsAsync(cancellationToken);
             RecommendedSeries = await LoadRecommendedSeriesAsync(cancellationToken);
             RecommendedAdaptations = await LoadRecommendedAdaptationsAsync(cancellationToken);
@@ -115,11 +115,11 @@ namespace BookWise.Web.Pages
                     })
                     .ToList();
 
-                // Prefer stored profile summary when present
+                // Prefer stored profile summary when present; do NOT fall back to book descriptions
                 var summary = !string.IsNullOrWhiteSpace(a.ProfileSummary)
                     ? TrimToLength(a.ProfileSummary!, 200)
                     : BuildAuthorSummary(
-                        works.Select(w => new Book { Description = w.Description }).ToList()
+                        works.Select(w => new Book { Description = null }).ToList()
                       );
 
                 // Get cached avatar URL or fallback to placeholder
@@ -220,7 +220,7 @@ namespace BookWise.Web.Pages
             return Array.Empty<RecommendedAdaptation>();
         }
 
-        private async Task<(QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteCard> Quotes)> LoadQuotesAsync(CancellationToken cancellationToken)
+        private async Task<(QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteGroup> Groups)> LoadQuotesAsync(CancellationToken cancellationToken)
         {
             var quoteEntities = await _context.BookQuotes
                 .AsNoTracking()
@@ -229,7 +229,7 @@ namespace BookWise.Web.Pages
 
             if (quoteEntities.Count == 0)
             {
-                return (QuoteCard.Empty, Array.Empty<QuoteCard>());
+                return (QuoteCard.Empty, Array.Empty<QuoteGroup>());
             }
 
             // Order by AddedOn on the client side to avoid SQLite DateTimeOffset ordering issues
@@ -237,22 +237,50 @@ namespace BookWise.Web.Pages
                 .OrderByDescending(q => q.AddedOn)
                 .ToList();
 
-            var cards = quoteEntities
-                .Select(q => new QuoteCard
+            // Quote of the day is the most recent one
+            var first = quoteEntities[0];
+            var quoteOfTheDay = new QuoteCard
+            {
+                Text = first.Text,
+                Author = first.Author,
+                Source = first.Source,
+                BackgroundImageUrl = !string.IsNullOrWhiteSpace(first.BackgroundImageUrl)
+                    ? first.BackgroundImageUrl
+                    : string.IsNullOrWhiteSpace(first.Book?.CoverImageUrl) ? null : first.Book?.CoverImageUrl
+            };
+
+            // Group the rest by book for a clearer browsing experience
+            var groups = quoteEntities
+                .Skip(1)
+                .GroupBy(q => new
                 {
-                    Text = q.Text,
-                    Author = q.Author,
-                    Source = q.Source,
-                    BackgroundImageUrl = !string.IsNullOrWhiteSpace(q.BackgroundImageUrl)
-                        ? q.BackgroundImageUrl
-                        : string.IsNullOrWhiteSpace(q.Book?.CoverImageUrl) ? null : q.Book?.CoverImageUrl
+                    q.BookId,
+                    Title = q.Book?.Title ?? "Unknown Book",
+                    Author = q.Book?.Author ?? "Unknown Author",
+                    Cover = string.IsNullOrWhiteSpace(q.Book?.CoverImageUrl) ? "/img/book-placeholder.svg" : q.Book!.CoverImageUrl
+                })
+                .OrderByDescending(g => g.Max(q => q.AddedOn))
+                .Select(g => new QuoteGroup
+                {
+                    BookTitle = g.Key.Title,
+                    BookAuthor = g.Key.Author,
+                    CoverImageUrl = g.Key.Cover!,
+                    Quotes = g
+                        .OrderByDescending(q => q.AddedOn)
+                        .Select(q => new QuoteCard
+                        {
+                            Text = q.Text,
+                            Author = q.Author,
+                            Source = q.Source,
+                            BackgroundImageUrl = !string.IsNullOrWhiteSpace(q.BackgroundImageUrl)
+                                ? q.BackgroundImageUrl
+                                : string.IsNullOrWhiteSpace(q.Book?.CoverImageUrl) ? null : q.Book?.CoverImageUrl
+                        })
+                        .ToList()
                 })
                 .ToList();
 
-            var quoteOfTheDay = cards[0];
-            var remaining = cards.Skip(1).ToList();
-
-            return (quoteOfTheDay, remaining);
+            return (quoteOfTheDay, groups);
         }
 
         private RecommendedAuthor MapToRecommendedAuthor(AuthorRecommendation recommendation)
@@ -296,21 +324,14 @@ namespace BookWise.Web.Pages
 
         private static string BuildAuthorSummary(IReadOnlyCollection<Book> books)
         {
-            var summarySource = books
-                .Select(book => book.Description)
-                .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
-
-            if (!string.IsNullOrWhiteSpace(summarySource))
-            {
-                return TrimToLength(summarySource, 160);
-            }
-
+            // Only use the author's own introduction (ProfileSummary) for summaries.
+            // If unavailable, provide a neutral placeholder rather than a book description.
             var count = books.Count;
             return count switch
             {
-                0 => "No books yet for this author.",
-                1 => "You have 1 book from this author on your shelf.",
-                _ => $"You have {count} books from this author on your shelf."
+                0 => "No introduction available yet.",
+                1 => "No introduction available yet.",
+                _ => "No introduction available yet."
             };
         }
 
@@ -449,6 +470,14 @@ namespace BookWise.Web.Pages
             public string Author { get; init; } = string.Empty;
             public string? Source { get; init; }
             public string? BackgroundImageUrl { get; init; }
+        }
+
+        public class QuoteGroup
+        {
+            public string BookTitle { get; init; } = string.Empty;
+            public string BookAuthor { get; init; } = string.Empty;
+            public string CoverImageUrl { get; init; } = "/img/book-placeholder.svg";
+            public IReadOnlyList<QuoteCard> Quotes { get; init; } = Array.Empty<QuoteCard>();
         }
 
         public class RecommendedAuthor

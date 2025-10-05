@@ -4537,6 +4537,87 @@ a:hover {
   gap: 1.75rem;
 }
 
+/* Grouped Quotes by Book */
+.quotes-by-book {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.quote-book-group {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.quote-book-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 1rem 1.25rem;
+}
+
+.quote-book-summary::-webkit-details-marker {
+  display: none;
+}
+
+.quote-book-summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--gray-500);
+  transition: transform 0.2s ease;
+}
+
+.quote-book-group[open] .quote-book-summary::after {
+  transform: rotate(180deg);
+}
+
+.quote-book-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.quote-book-cover img {
+  width: 44px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+}
+
+.quote-book-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.quote-book-title {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--gray-900);
+}
+
+.quote-book-author {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--gray-500);
+}
+
+.quote-count-badge {
+  margin-left: auto;
+  background: rgba(13, 110, 253, 0.12);
+  color: var(--brand-600);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.quote-book-list {
+  padding: 0 1.25rem 1.25rem;
+}
+
 .quote-card {
   position: relative;
   background: var(--surface);

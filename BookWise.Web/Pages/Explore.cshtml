@@ -314,30 +314,58 @@
 
                 <section class="quotes-collection">
                     <div class="quotes-collection-header">
-                        <h2 class="quote-section-heading">All Quotes</h2>
-                        <p>Save your favorites and revisit them anytime.</p>
+                        <h2 class="quote-section-heading">Quotes by Book</h2>
+                        <p>Browse quotes grouped under their books. Click to collapse sections.</p>
                     </div>
-                    <div class="quotes-grid">
-                        @foreach (var quote in Model.Quotes)
+
+                    <div class="quotes-by-book">
+                        @if (!Model.GroupedQuotes.Any())
                         {
-                            <article class="quote-card">
-                                <svg class="quote-card-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                    <path d="M8.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 11.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 6 13.25V12a7 7 0 0 1 2.5-5.37V5zM17.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 20.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 15 13.25V12a7 7 0 0 1 2.5-5.37V5z" fill="currentColor" />
-                                </svg>
-                                <p class="quote-card-text">@quote.Text</p>
-                                <footer class="quote-card-footer">
-                                    <cite>@quote.Author</cite>
-                                    @if (!string.IsNullOrWhiteSpace(quote.Source))
+                            <p class="empty-hint">No additional quotes yet. Add more to see them grouped by book.</p>
+                        }
+                        else
+                        {
+                            @foreach (var group in Model.GroupedQuotes)
+                            {
+                            <details class="quote-book-group" open>
+                                <summary class="quote-book-summary">
+                                    <div class="quote-book-header">
+                                        <div class="quote-book-cover">
+                                            <img src="@group.CoverImageUrl" alt="@group.BookTitle cover" loading="lazy" />
+                                        </div>
+                                        <div class="quote-book-meta">
+                                            <h3 class="quote-book-title">@group.BookTitle</h3>
+                                            <p class="quote-book-author">@group.BookAuthor</p>
+                                        </div>
+                                        <span class="quote-count-badge" aria-label="Quotes count">@group.Quotes.Count</span>
+                                    </div>
+                                </summary>
+
+                                <div class="quote-book-list quotes-grid">
+                                    @foreach (var quote in group.Quotes)
                                     {
-                                        <span class="quote-card-source">@quote.Source</span>
+                                        <article class="quote-card">
+                                            <svg class="quote-card-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                <path d="M8.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 11.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 6 13.25V12a7 7 0 0 1 2.5-5.37V5zM17.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 20.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 15 13.25V12a7 7 0 0 1 2.5-5.37V5z" fill="currentColor" />
+                                            </svg>
+                                            <p class="quote-card-text">@quote.Text</p>
+                                            <footer class="quote-card-footer">
+                                                <cite>@quote.Author</cite>
+                                                @if (!string.IsNullOrWhiteSpace(quote.Source))
+                                                {
+                                                    <span class="quote-card-source">@quote.Source</span>
+                                                }
+                                            </footer>
+                                            <button type="button" class="quote-card-share" aria-label="Share quote from @quote.Author">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                                    <path d="M18 8.5a2.5 2.5 0 1 0-2.38-3.2l-7.01 3.5a2.5 2.5 0 0 0-1.61-.6A2.5 2.5 0 1 0 9.5 11c.57 0 1.09-.19 1.51-.5l6.98 3.49a2.5 2.5 0 1 0 .53-1.47l-6.99-3.49a2.5 2.5 0 0 0 .03-.53c0-.18-.02-.35-.06-.51l7-3.5c.37.31.84.51 1.35.51Z" fill="currentColor" />
+                                                </svg>
+                                            </button>
+                                        </article>
                                     }
-                                </footer>
-                                <button type="button" class="quote-card-share" aria-label="Share quote from @quote.Author">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                                        <path d="M18 8.5a2.5 2.5 0 1 0-2.38-3.2l-7.01 3.5a2.5 2.5 0 0 0-1.61-.6A2.5 2.5 0 1 0 9.5 11c.57 0 1.09-.19 1.51-.5l6.98 3.49a2.5 2.5 0 1 0 .53-1.47l-6.99-3.49a2.5 2.5 0 0 0 .03-.53c0-.18-.02-.35-.06-.51l7-3.5c.37.31.84.51 1.35.51Z" fill="currentColor" />
-                                    </svg>
-                                </button>
-                            </article>
+                                </div>
+                            </details>
+                            }
                         }
                     </div>
                 </section>
@@ -367,7 +395,11 @@
                         {
                             <article class="recommendation-card recommendation-card--author">
                                 <div class="recommendation-card-media">
-                                    <img src="@author.ImageUrl" alt="@author.Name" loading="lazy" />
+                                    <img src="@author.ImageUrl"
+                                         alt="@author.Name"
+                                         loading="lazy"
+                                         referrerpolicy="no-referrer"
+                                         data-author-name="@author.Name" />
                                 </div>
                                 <div class="recommendation-card-body">
                                     <h3>@author.Name</h3>
@@ -546,26 +578,35 @@
                 });
             });
 
-            // Trigger async avatar refresh for placeholders and update when ready
+            // Trigger async avatar resolution (authors + recommendations)
             const placeholder = '/img/author-placeholder.svg';
             const wait = (ms) => new Promise(r => setTimeout(r, ms));
             const isPlaceholder = (src) => !src || src.endsWith('author-placeholder.svg');
 
             async function ensureAvatarFor(img) {
                 const name = img.dataset.authorName;
-                if (!name || !isPlaceholder(img.getAttribute('src'))) return;
-                try {
-                    await fetch(`/api/authors/refresh-avatar?name=${encodeURIComponent(name)}`, { method: 'POST' });
-                } catch (_) { /* ignore */ }
+                if (!name) return;
 
-                for (let attempt = 0; attempt < 10; attempt++) {
+                const currentSrc = img.getAttribute('src') || '';
+                const needsProfileRefresh = isPlaceholder(currentSrc);
+
+                if (needsProfileRefresh) {
+                    try {
+                        await fetch(`/api/authors/refresh-avatar?name=${encodeURIComponent(name)}`, { method: 'POST' });
+                    } catch (_) { /* ignore */ }
+                }
+
+                const tries = needsProfileRefresh ? 10 : 5;
+                for (let attempt = 0; attempt < tries; attempt++) {
                     try {
                         const res = await fetch(`/api/authors/photo?name=${encodeURIComponent(name)}`, { cache: 'no-store' });
                         if (res.ok) {
                             const data = await res.json();
-                            if (data && data.ready && data.photoUrl && !isPlaceholder(data.photoUrl)) {
-                                img.setAttribute('src', data.photoUrl);
-                                break;
+                            if (data && data.photoUrl && (!isPlaceholder(data.photoUrl) || needsProfileRefresh)) {
+                                if (img.getAttribute('src') !== data.photoUrl) {
+                                    img.setAttribute('src', data.photoUrl);
+                                }
+                                if (data.ready) break; // stop polling if cache is ready
                             }
                         }
                     } catch (_) { /* ignore */ }
@@ -573,7 +614,12 @@
                 }
             }
 
+            // Authors panel avatars
             document.querySelectorAll('.author-avatar-frame img[data-author-name]').forEach(img => {
+                ensureAvatarFor(img);
+            });
+            // Recommendation author avatars
+            document.querySelectorAll('.recommendation-card--author img[data-author-name]').forEach(img => {
                 ensureAvatarFor(img);
             });
         });
