@@ -67,6 +67,15 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
         if (book.AuthorDetails != null)
         {
             await FetchAndUpdateAuthorProfileAsync(client, book.AuthorDetails, workItem.DoubanSubjectId, cancellationToken);
+            // Persist author updates early to avoid losing them if later steps fail
+            try
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist author profile updates for {Author}", book.AuthorDetails.Name);
+            }
         }
 
         var existingQuotes = book.Quotes
@@ -231,6 +240,18 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                 }
                 
                 _logger.LogWarning("Found author link {AuthorHref} but could not extract ID", authorHref);
+            }
+
+            // Final fallback: scan the entire HTML for author/personage id patterns
+            {
+                var htmlText = document.DocumentNode.OuterHtml ?? html;
+                var m = System.Text.RegularExpressions.Regex.Match(htmlText, @"/(?:personage|author)/(\d+)/", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    var authorId = m.Groups[1].Value;
+                    _logger.LogInformation("Fallback extracted author Douban ID {AuthorId} from subject page HTML", authorId);
+                    return authorId;
+                }
             }
 
             return null;
