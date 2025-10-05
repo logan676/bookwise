@@ -40,10 +40,24 @@ namespace BookWise.Web.Pages
 
         private async Task<IReadOnlyList<AuthorProfile>> LoadAuthorsAsync(CancellationToken cancellationToken)
         {
+            // Project only required fields to avoid selecting unmapped columns
             var authors = await _context.Authors
                 .AsNoTracking()
-                .Include(author => author.Books)
-                .OrderBy(author => author.Name)
+                .Where(a => a.Books.Any())
+                .Select(a => new
+                {
+                    a.Name,
+                    a.AvatarUrl,
+                    Books = a.Books.Select(b => new
+                    {
+                        b.Title,
+                        b.Category,
+                        b.Status,
+                        b.CoverImageUrl,
+                        b.Description
+                    }).ToList()
+                })
+                .OrderBy(a => a.Name)
                 .ToListAsync(cancellationToken);
 
             if (authors.Count == 0)
@@ -52,31 +66,50 @@ namespace BookWise.Web.Pages
             }
 
             var authorProfiles = authors
-                .Where(author => author.Books.Count > 0)
-                .Select(author =>
+                .Select(a =>
                 {
-                    var works = author.Books
-                        .OrderBy(book => book.Title, StringComparer.OrdinalIgnoreCase)
+                    var works = a.Books
+                        .OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase)
+                        .Select(b => new
+                        {
+                            b.Title,
+                            b.Status,
+                            Subtitle = BuildBookSubtitle(new Book { Category = b.Category, Status = b.Status }),
+                            CoverUrl = string.IsNullOrWhiteSpace(b.CoverImageUrl)
+                                ? "/img/book-placeholder.svg"
+                                : b.CoverImageUrl,
+                            Description = b.Description
+                        })
                         .ToList();
 
                     var libraryWorks = works
-                        .Where(book => IsLibraryStatus(book.Status))
-                        .Select(MapToAuthorWork)
+                        .Where(w => IsLibraryStatus(w.Status))
+                        .Select(w => new AuthorWork
+                        {
+                            Title = w.Title,
+                            Subtitle = w.Subtitle,
+                            CoverUrl = w.CoverUrl
+                        })
                         .ToList();
 
                     var availableWorks = works
-                        .Where(book => !IsLibraryStatus(book.Status))
-                        .Select(MapToAuthorWork)
+                        .Where(w => !IsLibraryStatus(w.Status))
+                        .Select(w => new AuthorWork
+                        {
+                            Title = w.Title,
+                            Subtitle = w.Subtitle,
+                            CoverUrl = w.CoverUrl
+                        })
                         .ToList();
 
                     return new AuthorProfile
                     {
-                        Slug = GenerateSlug(author.Name),
-                        Name = author.Name,
-                        Summary = BuildAuthorSummary(works),
-                        PhotoUrl = string.IsNullOrWhiteSpace(author.AvatarUrl)
-                            ? "/img/book-placeholder.svg"
-                            : author.AvatarUrl!,
+                        Slug = GenerateSlug(a.Name),
+                        Name = a.Name,
+                        Summary = BuildAuthorSummary(
+                            works.Select(w => new Book { Description = w.Description }).ToList()
+                        ),
+                        PhotoUrl = string.IsNullOrWhiteSpace(a.AvatarUrl) ? "/img/book-placeholder.svg" : a.AvatarUrl!,
                         WorkCount = works.Count,
                         Library = libraryWorks,
                         AvailableWorks = availableWorks
@@ -179,12 +212,14 @@ namespace BookWise.Web.Pages
             var imageUrl = recommendation.ImageUrl;
             if (string.IsNullOrWhiteSpace(imageUrl))
             {
-                // Try to use stored avatar for this author if available
-                var existing = _context.Authors.AsNoTracking()
-                    .FirstOrDefault(a => a.Name == recommendation.RecommendedAuthor);
-                imageUrl = string.IsNullOrWhiteSpace(existing?.AvatarUrl)
+                // Try to use stored avatar for this author if available (only select AvatarUrl)
+                var existingAvatarUrl = _context.Authors.AsNoTracking()
+                    .Where(a => a.Name == recommendation.RecommendedAuthor)
+                    .Select(a => a.AvatarUrl)
+                    .FirstOrDefault();
+                imageUrl = string.IsNullOrWhiteSpace(existingAvatarUrl)
                     ? "/img/book-placeholder.svg"
-                    : existing!.AvatarUrl;
+                    : existingAvatarUrl!;
             }
 
             return new RecommendedAuthor
