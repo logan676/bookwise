@@ -63,11 +63,44 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
             entity.Property(a => a.AvatarUrl)
                 .HasMaxLength(500);
 
+            entity.Property(a => a.AvatarStatus)
+                .HasMaxLength(20);
+
+            entity.Property(a => a.AvatarSource)
+                .HasMaxLength(50);
+
             entity.Property(a => a.ProfileSummary)
                 .HasMaxLength(2000);
 
             entity.Property(a => a.ProfileNotableWorks)
                 .HasMaxLength(1000);
+
+            entity.Property(a => a.ProfileGender)
+                .HasMaxLength(20);
+
+            entity.Property(a => a.ProfileBirthDate)
+                .HasMaxLength(50);
+
+            entity.Property(a => a.ProfileBirthPlace)
+                .HasMaxLength(200);
+
+            entity.Property(a => a.ProfileOccupation)
+                .HasMaxLength(200);
+
+            entity.Property(a => a.ProfileOtherNames)
+                .HasMaxLength(200);
+
+            entity.Property(a => a.ProfileWebsiteUrl)
+                .HasMaxLength(500);
+
+            entity.Property(a => a.DoubanAuthorId)
+                .HasMaxLength(32);
+
+            entity.Property(a => a.DoubanAuthorType)
+                .HasMaxLength(20);
+
+            entity.Property(a => a.DoubanProfileUrl)
+                .HasMaxLength(500);
 
             entity.Property(a => a.ProfileRefreshedAt)
                 .HasColumnType("TEXT");
