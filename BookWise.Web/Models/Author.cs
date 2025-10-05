@@ -25,6 +25,35 @@ public class Author
     [MaxLength(1000)]
     public string? ProfileNotableWorks { get; set; }
 
+    [MaxLength(20)]
+    public string? ProfileGender { get; set; }
+
+    [MaxLength(50)]
+    public string? ProfileBirthDate { get; set; }
+
+    [MaxLength(200)]
+    public string? ProfileBirthPlace { get; set; }
+
+    [MaxLength(200)]
+    public string? ProfileOccupation { get; set; }
+
+    [MaxLength(200)]
+    public string? ProfileOtherNames { get; set; }
+
+    [MaxLength(500)]
+    [Url]
+    public string? ProfileWebsiteUrl { get; set; }
+
+    [MaxLength(32)]
+    public string? DoubanAuthorId { get; set; }
+
+    [MaxLength(20)]
+    public string? DoubanAuthorType { get; set; } // personage | author
+
+    [MaxLength(500)]
+    [Url]
+    public string? DoubanProfileUrl { get; set; }
+
     public DateTimeOffset? ProfileRefreshedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
