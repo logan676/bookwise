@@ -284,9 +284,8 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             string? doubanType = null;
             string? profileUrl = null;
 
-            // Prefer the personage page for richer profile data
-            authorClient.BaseAddress = new Uri("https://www.douban.com/");
-            using (var response = await authorClient.GetAsync($"personage/{authorId}/", cancellationToken))
+            // Prefer the personage page for richer profile data (use absolute URI to avoid BaseAddress mutations)
+            using (var response = await authorClient.GetAsync($"https://www.douban.com/personage/{authorId}/", cancellationToken))
             {
                 if (response.IsSuccessStatusCode)
                 {
@@ -347,8 +346,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             // Fallback: try author page on book.douban.com if we still don't have an avatar
             if (string.IsNullOrWhiteSpace(avatarUrl) || string.IsNullOrWhiteSpace(summary))
             {
-                authorClient.BaseAddress = new Uri("https://book.douban.com/");
-                using var response2 = await authorClient.GetAsync($"author/{authorId}/", cancellationToken);
+                using var response2 = await authorClient.GetAsync($"https://book.douban.com/author/{authorId}/", cancellationToken);
                 if (response2.IsSuccessStatusCode)
                 {
                     var html2 = await response2.Content.ReadAsStringAsync(cancellationToken);
