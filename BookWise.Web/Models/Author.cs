@@ -19,11 +19,11 @@ public class Author
     [MaxLength(500)]
     public string? AvatarUrl { get; set; }
 
-    [MaxLength(20)]
-    public string? AvatarStatus { get; set; } // Verified | Failed
+    // [MaxLength(20)]
+    // public string? AvatarStatus { get; set; } // Verified | Failed
 
-    [MaxLength(50)]
-    public string? AvatarSource { get; set; } // douban-personage | douban-author | manual
+    // [MaxLength(50)]
+    // public string? AvatarSource { get; set; } // douban-personage | douban-author | manual
 
     [MaxLength(2000)]
     public string? ProfileSummary { get; set; }

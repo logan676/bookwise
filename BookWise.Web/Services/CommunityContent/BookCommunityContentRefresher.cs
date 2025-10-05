@@ -150,16 +150,16 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             if (!string.IsNullOrWhiteSpace(profile.AvatarUrl))
             {
                 author.AvatarUrl = profile.AvatarUrl;
-                author.AvatarStatus = "Verified";
-                author.AvatarSource = CreateBookRequest.TrimToLength(profile.AvatarSource, 50);
+                // author.AvatarStatus = "Verified";
+                // author.AvatarSource = CreateBookRequest.TrimToLength(profile.AvatarSource, 50);
                 _logger.LogInformation("Updated avatar URL for author {AuthorName} to {AvatarUrl}", author.Name, profile.AvatarUrl);
             }
             else
             {
                 // Clear any external placeholders and mark as failed; UI will fallback to self-hosted placeholder
                 author.AvatarUrl = null;
-                author.AvatarStatus = "Failed";
-                author.AvatarSource = null;
+                // author.AvatarStatus = "Failed";
+                // author.AvatarSource = null;
             }
 
             // Update additional profile metadata
@@ -285,7 +285,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
             authorClient.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 (+https://bookwise.local)");
 
             string? avatarUrl = null;
-            string? avatarSource = null;
+            // string? avatarSource = null;
             string? summary = null;
             string? worksText = null;
             string? gender = null;
@@ -318,7 +318,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                     }
                     if (!string.IsNullOrWhiteSpace(avatarUrl))
                     {
-                        avatarSource = "douban-personage";
+                        // avatarSource = "douban-personage";
                     }
 
                     // Extract profile summary
@@ -388,7 +388,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                         }
                         if (!string.IsNullOrWhiteSpace(avatarUrl))
                         {
-                            avatarSource = "douban-author";
+                            // avatarSource = "douban-author";
                         }
                     }
 
@@ -412,7 +412,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                 {
                     _logger.LogWarning("Avatar URL did not verify for author {AuthorId}: {AvatarUrl}", authorId, avatarUrl);
                     avatarUrl = null;
-                    avatarSource = null;
+                    // avatarSource = null;
                 }
             }
 
@@ -420,7 +420,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
                 Summary: summary,
                 NotableWorks: worksText,
                 AvatarUrl: avatarUrl,
-                AvatarSource: avatarSource,
+                // AvatarSource: avatarSource,
                 Gender: gender,
                 BirthDate: birthDate,
                 BirthPlace: birthPlace,
@@ -835,7 +835,7 @@ public sealed class BookCommunityContentRefresher : IBookCommunityContentRefresh
         string? Summary,
         string? NotableWorks,
         string? AvatarUrl,
-        string? AvatarSource,
+        // string? AvatarSource,
         string? Gender,
         string? BirthDate,
         string? BirthPlace,

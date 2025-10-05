@@ -218,8 +218,8 @@
         };
 
         const buildDefaultAuthorAvatar = (name) => {
-            // Avoid external avatar placeholders; Douban parsing will update later.
-            return null;
+            // Return a valid fully-qualified URL for validation
+            return `${window.location.origin}/img/book-placeholder.svg`;
         };
 
         initializeStatusOptions();
@@ -526,7 +526,8 @@
                 details: {
                     title: payload.Title,
                     author: payload.Author,
-                    status: payload.Status
+                    status: payload.Status,
+                    payload: payload
                 },
                 variant: 'info'
             });
@@ -567,15 +568,22 @@
                                 ?? errorBody?.message
                                 ?? message;
                         }
-                    } catch {
-                        message = `${message} (status ${response.status})`;
+                    } catch (parseError) {
+                        // If we can't parse the error response, include the response text if available
+                        try {
+                            const responseText = await response.text();
+                            message = `${message} (status ${response.status}): ${responseText}`;
+                        } catch {
+                            message = `${message} (status ${response.status})`;
+                        }
                     }
 
                     logActivity('Book creation failed', {
                         details: {
                             status: response.status,
                             statusText: response.statusText,
-                            message
+                            message,
+                            payload: payload
                         },
                         variant: 'error'
                     });

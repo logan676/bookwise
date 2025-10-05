@@ -229,16 +229,39 @@ books.MapPost("", async (
         }
 
         var author = await AuthorResolver.GetOrCreateAsync(db, normalizedRequest.Author, normalizedRequest.AuthorAvatarUrl, cancellationToken);
+        logger.LogInformation("[{OperationId}] Author resolved with ID {AuthorId}", operationId, author.Id);
+        
         var entity = normalizedRequest.ToEntity(author);
+        logger.LogInformation("[{OperationId}] Book entity created", operationId);
+        
         CreateBookRequest.SyncQuoteSnapshot(entity);
+        logger.LogInformation("[{OperationId}] Quote snapshot synced", operationId);
+        
         await db.Books.AddAsync(entity, cancellationToken);
+        logger.LogInformation("[{OperationId}] Book added to context", operationId);
+        
         await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("[{OperationId}] Changes saved to database", operationId);
 
         // Schedule async tasks for the created book
-        await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { author.Name }, cancellationToken);
+        try
+        {
+            await recommendationScheduler.ScheduleRefreshForAuthorsAsync(new[] { author.Name }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "[{OperationId}] Failed to schedule author recommendations refresh", operationId);
+        }
         
         // Schedule community content fetch (author info, popular remarks, and quotes)
-        await communityContentScheduler.ScheduleFetchAsync(entity.Id, normalizedRequest.DoubanSubjectId, cancellationToken);
+        try
+        {
+            await communityContentScheduler.ScheduleFetchAsync(entity.Id, normalizedRequest.DoubanSubjectId, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "[{OperationId}] Failed to schedule community content fetch", operationId);
+        }
 
         timer.Stop();
         logger.LogInformation(

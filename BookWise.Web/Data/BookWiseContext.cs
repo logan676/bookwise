@@ -63,11 +63,11 @@ public class BookWiseContext(DbContextOptions<BookWiseContext> options) : DbCont
             entity.Property(a => a.AvatarUrl)
                 .HasMaxLength(500);
 
-            entity.Property(a => a.AvatarStatus)
-                .HasMaxLength(20);
+            // entity.Property(a => a.AvatarStatus)
+            //     .HasMaxLength(20);
 
-            entity.Property(a => a.AvatarSource)
-                .HasMaxLength(50);
+            // entity.Property(a => a.AvatarSource)
+            //     .HasMaxLength(50);
 
             entity.Property(a => a.ProfileSummary)
                 .HasMaxLength(2000);

@@ -5,37 +5,36 @@
 namespace BookWise.Web.Migrations
 {
     /// <inheritdoc />
-    public partial class AddAuthorAvatarMeta : Migration
+    public partial class RemoveAvatarMeta : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "AvatarStatus",
-                table: "Authors",
-                type: "TEXT",
-                maxLength: 20,
-                nullable: true);
+            migrationBuilder.DropColumn(
+                name: "AvatarSource",
+                table: "Authors");
 
+            migrationBuilder.DropColumn(
+                name: "AvatarStatus",
+                table: "Authors");
+        }
+
+        /// <inheritdoc />
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
             migrationBuilder.AddColumn<string>(
                 name: "AvatarSource",
                 table: "Authors",
                 type: "TEXT",
                 maxLength: 50,
                 nullable: true);
-        }
 
-        /// <inheritdoc />
-        protected override void Down(MigrationBuilder migrationBuilder)
-        {
-            migrationBuilder.DropColumn(
+            migrationBuilder.AddColumn<string>(
                 name: "AvatarStatus",
-                table: "Authors");
-
-            migrationBuilder.DropColumn(
-                name: "AvatarSource",
-                table: "Authors");
+                table: "Authors",
+                type: "TEXT",
+                maxLength: 20,
+                nullable: true);
         }
     }
 }
-
