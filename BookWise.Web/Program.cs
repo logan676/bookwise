@@ -131,6 +131,7 @@ app.MapRazorPages();
 var books = app.MapGroup("/api/books");
 var authors = app.MapGroup("/api/authors");
 var rankings = app.MapGroup("/api/rankings");
+var recommendations = app.MapGroup("/api/recommendations");
 
 rankings.MapGet("/annual", async (
     [FromQuery] int year,
@@ -164,6 +165,101 @@ rankings.MapGet("/annual", async (
     {
         logger.LogError(ex, "[Rankings] Failed to load annual rankings for {Year}", year);
         return Results.Problem("Failed to load annual rankings", statusCode: StatusCodes.Status500InternalServerError);
+    }
+});
+
+// Lazy-loaded recommendations to keep /Explore fast
+recommendations.MapGet("/series", async (
+    BookWiseContext db,
+    IDeepSeekRecommendationClient deepSeek,
+    ILogger<Program> logger,
+    CancellationToken requestToken) =>
+{
+    try
+    {
+        var titles = await db.Books
+            .AsNoTracking()
+            .Where(b => b.Status == "reading" || b.Status == "read")
+            .OrderBy(b => b.Title)
+            .Select(b => b.Title)
+            .ToListAsync(requestToken);
+
+        if (titles.Count == 0)
+        {
+            return Results.Ok(Array.Empty<object>());
+        }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(8)); // keep snappy
+
+        var suggestions = await deepSeek.GetRecommendedSeriesAsync(titles, cts.Token);
+        var payload = suggestions
+            .Select(s => new
+            {
+                title = s.Title,
+                installment = s.Installment,
+                coverUrl = string.IsNullOrWhiteSpace(s.CoverUrl) ? "/img/book-placeholder.svg" : s.CoverUrl
+            })
+            .ToList();
+
+        return Results.Ok(payload);
+    }
+    catch (OperationCanceledException)
+    {
+        logger.LogInformation("[Recs] Series recommendations request cancelled/timeout");
+        return Results.Ok(Array.Empty<object>());
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "[Recs] Failed to load series recommendations");
+        return Results.Ok(Array.Empty<object>());
+    }
+});
+
+recommendations.MapGet("/adaptations", async (
+    BookWiseContext db,
+    IDeepSeekRecommendationClient deepSeek,
+    ILogger<Program> logger,
+    CancellationToken requestToken) =>
+{
+    try
+    {
+        var titles = await db.Books
+            .AsNoTracking()
+            .Where(b => b.Status == "reading" || b.Status == "read")
+            .OrderBy(b => b.Title)
+            .Select(b => b.Title)
+            .ToListAsync(requestToken);
+
+        if (titles.Count == 0)
+        {
+            return Results.Ok(Array.Empty<object>());
+        }
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(requestToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(8));
+
+        var suggestions = await deepSeek.GetRecommendedAdaptationsAsync(titles, cts.Token);
+        var payload = suggestions
+            .Select(s => new
+            {
+                title = s.Title,
+                type = s.Type,
+                imageUrl = string.IsNullOrWhiteSpace(s.ImageUrl) ? "/img/book-placeholder.svg" : s.ImageUrl
+            })
+            .ToList();
+
+        return Results.Ok(payload);
+    }
+    catch (OperationCanceledException)
+    {
+        logger.LogInformation("[Recs] Adaptations recommendations request cancelled/timeout");
+        return Results.Ok(Array.Empty<object>());
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "[Recs] Failed to load adaptation recommendations");
+        return Results.Ok(Array.Empty<object>());
     }
 });
 

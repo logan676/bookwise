@@ -47,8 +47,11 @@ namespace BookWise.Web.Pages
             (QuoteOfTheDay, GroupedQuotes) = await LoadQuotesAsync(cancellationToken);
             (MyRecentRemarks, CommunityRecentRemarks) = await LoadRemarksAsync(cancellationToken);
             RecommendedAuthors = await LoadRecommendedAuthorsAsync(cancellationToken);
-            RecommendedSeries = await LoadRecommendedSeriesAsync(cancellationToken);
-            RecommendedAdaptations = await LoadRecommendedAdaptationsAsync(cancellationToken);
+            // Heavy LLM-backed sections are now lazy-loaded on demand via API
+            // to keep initial page load fast. See /api/recommendations endpoints
+            // and Explore.cshtml script for client-side loading.
+            RecommendedSeries = Array.Empty<RecommendedSeriesItem>();
+            RecommendedAdaptations = Array.Empty<RecommendedAdaptation>();
         }
 
         private async Task<IReadOnlyList<AuthorProfile>> LoadAuthorsAsync(CancellationToken cancellationToken)
@@ -294,10 +297,11 @@ namespace BookWise.Web.Pages
 
         private async Task<(QuoteCard QuoteOfTheDay, IReadOnlyList<QuoteGroup> Groups)> LoadQuotesAsync(CancellationToken cancellationToken)
         {
-            // Load a bounded set of the most recent quotes, projecting only required fields
+            // Load only a bounded set of most recent quotes using Id ordering (fast on SQLite)
             var quotes = await _context.BookQuotes
                 .AsNoTracking()
-                // SQLite cannot ORDER BY DateTimeOffset; fetch then sort client-side
+                .OrderByDescending(q => q.Id)
+                .Take(MaxRecentQuotes)
                 .Select(q => new
                 {
                     q.Text,
@@ -312,11 +316,8 @@ namespace BookWise.Web.Pages
                 })
                 .ToListAsync(cancellationToken);
 
-            // Order by AddedOn on the client to avoid SQLite DateTimeOffset limitation
-            quotes = quotes
-                .OrderByDescending(q => q.AddedOn)
-                .Take(MaxRecentQuotes)
-                .ToList();
+            // Order by AddedOn on the client (DateTimeOffset ordering on SQLite is limited)
+            quotes = quotes.OrderByDescending(q => q.AddedOn).ToList();
 
             if (quotes.Count == 0)
             {
@@ -373,35 +374,41 @@ namespace BookWise.Web.Pages
 
         private async Task<(IReadOnlyList<RemarkItem> Mine, IReadOnlyList<RemarkItem> Community)> LoadRemarksAsync(CancellationToken cancellationToken)
         {
-            // Project minimal fields to avoid selecting entire entities
-            var remarks = await _context.BookRemarks
+            // Fetch two small, targeted lists instead of scanning all remarks
+            var mine = await _context.BookRemarks
                 .AsNoTracking()
+                .Where(r => r.Type == BookRemarkType.Mine)
+                .OrderByDescending(r => r.Id)
+                .Take(24)
                 .Select(r => new
                 {
                     r.Title,
                     r.Content,
                     r.AddedOn,
-                    r.Type,
                     BookTitle = r.Book != null ? r.Book.Title : null,
                     BookAuthor = r.Book != null ? r.Book.Author : null,
                     BookCover = r.Book != null ? r.Book.CoverImageUrl : null
                 })
                 .ToListAsync(cancellationToken);
 
-            if (remarks.Count == 0)
-            {
-                return (Array.Empty<RemarkItem>(), Array.Empty<RemarkItem>());
-            }
-
-            // Order by AddedOn client-side (SQLite limitation with DateTimeOffset)
-            var ordered = remarks
-                .OrderByDescending(r => r.AddedOn)
-                .ToList();
-
-            // Cap totals to keep Explore fast and light
-            var mine = ordered
-                .Where(r => r.Type == BookRemarkType.Mine)
+            var community = await _context.BookRemarks
+                .AsNoTracking()
+                .Where(r => r.Type == BookRemarkType.Community)
+                .OrderByDescending(r => r.Id)
                 .Take(24)
+                .Select(r => new
+                {
+                    r.Title,
+                    r.Content,
+                    r.AddedOn,
+                    BookTitle = r.Book != null ? r.Book.Title : null,
+                    BookAuthor = r.Book != null ? r.Book.Author : null,
+                    BookCover = r.Book != null ? r.Book.CoverImageUrl : null
+                })
+                .ToListAsync(cancellationToken);
+
+            var mineItems = mine
+                .OrderByDescending(r => r.AddedOn)
                 .Select(r => new RemarkItem
                 {
                     BookTitle = string.IsNullOrWhiteSpace(r.BookTitle) ? "Unknown Book" : r.BookTitle!,
@@ -413,9 +420,8 @@ namespace BookWise.Web.Pages
                 })
                 .ToList();
 
-            var community = ordered
-                .Where(r => r.Type == BookRemarkType.Community)
-                .Take(24)
+            var communityItems = community
+                .OrderByDescending(r => r.AddedOn)
                 .Select(r => new RemarkItem
                 {
                     BookTitle = string.IsNullOrWhiteSpace(r.BookTitle) ? "Unknown Book" : r.BookTitle!,
@@ -427,7 +433,7 @@ namespace BookWise.Web.Pages
                 })
                 .ToList();
 
-            return (mine, community);
+            return (mineItems, communityItems);
         }
 
         private RecommendedAuthor MapToRecommendedAuthor(AuthorRecommendation recommendation)

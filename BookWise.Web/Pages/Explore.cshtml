@@ -310,35 +310,46 @@
                         <h2 class="remarks-section-heading">Your Recent Remarks</h2>
                         <p>Private notes you’ve saved while adding books.</p>
                     </div>
-                    <div class="remarks-grid">
-                        @if (!Model.MyRecentRemarks.Any())
-                        {
-                            <p class="empty-hint">No personal remarks yet. Add one when saving a book.</p>
-                        }
-                        else
-                        {
-                            @foreach (var remark in Model.MyRecentRemarks)
+                    @if (!Model.MyRecentRemarks.Any())
+                    {
+                        <p class="empty-hint">No personal remarks yet. Add one when saving a book.</p>
+                    }
+                    else
+                    {
+                        var myGroups = Model.MyRecentRemarks
+                            .GroupBy(r => new { r.BookTitle, r.BookAuthor, Ccover = r.CoverImageUrl })
+                            .OrderByDescending(g => g.Max(x => x.AddedOn));
+
+                        <div class="remarks-groups">
+                            @foreach (var group in myGroups)
                             {
-                                <article class="remark-card">
-                                    <div class="remark-media">
-                                        <img src="@remark.CoverImageUrl" alt="@remark.BookTitle cover" loading="lazy" />
+                                <section class="remark-book-group" aria-label="Remarks for @group.Key.BookTitle by @group.Key.BookAuthor">
+                                    <header class="remark-group-header">
+                                        <div class="remark-group-cover">
+                                            <img src="@group.Key.Ccover" alt="@group.Key.BookTitle cover" loading="lazy" />
+                                        </div>
+                                        <div class="remark-group-meta">
+                                            <h3 class="remark-group-title">@group.Key.BookTitle</h3>
+                                            <p class="remark-group-author">@group.Key.BookAuthor</p>
+                                        </div>
+                                        <span class="remark-group-badge" title="Your remarks">Mine • @group.Count()</span>
+                                    </header>
+                                    <div class="remark-list">
+                                        @foreach (var item in group)
+                                        {
+                                            <article class="remark-item">
+                                                @if (!string.IsNullOrWhiteSpace(item.Title))
+                                                {
+                                                    <h4 class="remark-item-title">@item.Title</h4>
+                                                }
+                                                <p class="remark-item-content">@item.Content</p>
+                                            </article>
+                                        }
                                     </div>
-                                    <div class="remark-body">
-                                        <h3 class="remark-book-title">@remark.BookTitle</h3>
-                                        <p class="remark-book-author">@remark.BookAuthor</p>
-                                        <p class="remark-content">@remark.Content</p>
-                                        <footer class="remark-footer">
-                                            <span class="remark-badge">Mine</span>
-                                            @if (!string.IsNullOrWhiteSpace(remark.Title))
-                                            {
-                                                <span class="remark-title">@remark.Title</span>
-                                            }
-                                        </footer>
-                                    </div>
-                                </article>
+                                </section>
                             }
-                        }
-                    </div>
+                        </div>
+                    }
                 </section>
 
                 <section class="remarks-collection">
@@ -346,35 +357,46 @@
                         <h2 class="remarks-section-heading">Community Picks</h2>
                         <p>Short, popular comments from Douban readers.</p>
                     </div>
-                    <div class="remarks-grid">
-                        @if (!Model.CommunityRecentRemarks.Any())
-                        {
-                            <p class="empty-hint">No community remarks yet. Add a book with a Douban link to fetch them.</p>
-                        }
-                        else
-                        {
-                            @foreach (var remark in Model.CommunityRecentRemarks)
+                    @if (!Model.CommunityRecentRemarks.Any())
+                    {
+                        <p class="empty-hint">No community remarks yet. Add a book with a Douban link to fetch them.</p>
+                    }
+                    else
+                    {
+                        var communityGroups = Model.CommunityRecentRemarks
+                            .GroupBy(r => new { r.BookTitle, r.BookAuthor, Ccover = r.CoverImageUrl })
+                            .OrderByDescending(g => g.Max(x => x.AddedOn));
+
+                        <div class="remarks-groups">
+                            @foreach (var group in communityGroups)
                             {
-                                <article class="remark-card">
-                                    <div class="remark-media">
-                                        <img src="@remark.CoverImageUrl" alt="@remark.BookTitle cover" loading="lazy" />
+                                <section class="remark-book-group" aria-label="Community remarks for @group.Key.BookTitle by @group.Key.BookAuthor">
+                                    <header class="remark-group-header">
+                                        <div class="remark-group-cover">
+                                            <img src="@group.Key.Ccover" alt="@group.Key.BookTitle cover" loading="lazy" />
+                                        </div>
+                                        <div class="remark-group-meta">
+                                            <h3 class="remark-group-title">@group.Key.BookTitle</h3>
+                                            <p class="remark-group-author">@group.Key.BookAuthor</p>
+                                        </div>
+                                        <span class="remark-group-badge remark-group-badge--community" title="Community remarks">Community • @group.Count()</span>
+                                    </header>
+                                    <div class="remark-list">
+                                        @foreach (var item in group)
+                                        {
+                                            <article class="remark-item">
+                                                @if (!string.IsNullOrWhiteSpace(item.Title))
+                                                {
+                                                    <h4 class="remark-item-title">@item.Title</h4>
+                                                }
+                                                <p class="remark-item-content">@item.Content</p>
+                                            </article>
+                                        }
                                     </div>
-                                    <div class="remark-body">
-                                        <h3 class="remark-book-title">@remark.BookTitle</h3>
-                                        <p class="remark-book-author">@remark.BookAuthor</p>
-                                        <p class="remark-content">@remark.Content</p>
-                                        <footer class="remark-footer">
-                                            <span class="remark-badge remark-badge--community">Community</span>
-                                            @if (!string.IsNullOrWhiteSpace(remark.Title))
-                                            {
-                                                <span class="remark-title">@remark.Title</span>
-                                            }
-                                        </footer>
-                                    </div>
-                                </article>
+                                </section>
                             }
-                        }
-                    </div>
+                        </div>
+                    }
                 </section>
             </div>
         </section>
@@ -627,6 +649,9 @@
             const initialTab = exploreTabs.find((tab) => tab.classList.contains('is-active'))?.dataset.exploreTab ?? exploreTabs[0]?.dataset.exploreTab;
             if (initialTab) {
                 syncPanels(initialTab);
+                if (initialTab === 'recommendations') {
+                    ensureRecommendationsLoaded();
+                }
             }
 
             exploreTabs.forEach((tab) => {
@@ -640,6 +665,9 @@
 
                     if (target === 'bestsellers') {
                         ensureBestsellersLoaded();
+                    }
+                    if (target === 'recommendations') {
+                        ensureRecommendationsLoaded();
                     }
                 });
             });
@@ -665,12 +693,15 @@
                 });
             }
 
-            const recommendationCards = document.querySelectorAll('.recommendation-card');
-            if (recommendationCards.length) {
-                recommendationCards.forEach((card, index) => {
-                    card.style.setProperty('--enter-delay', `${index * 60}ms`);
-                });
+            function applyRecommendationAnimations(scope = document) {
+                const recommendationCards = scope.querySelectorAll?.('.recommendation-card') ?? document.querySelectorAll('.recommendation-card');
+                if (recommendationCards.length) {
+                    recommendationCards.forEach((card, index) => {
+                        card.style.setProperty('--enter-delay', `${index * 60}ms`);
+                    });
+                }
             }
+            applyRecommendationAnimations();
 
             // Enhanced author profile interactions
             const authorTags = document.querySelectorAll('.author-tag, .author-link');
@@ -770,6 +801,82 @@
             document.querySelectorAll('.recommendation-card--author img[data-author-name]').forEach(img => {
                 ensureAvatarFor(img);
             });
+
+            // Recommendations (Series & Adaptations) — lazy loaded
+            let recsLoaded = false;
+            const seriesGrid = document.querySelector('.recommendation-grid--series');
+            const adaptationsGrid = document.querySelector('.recommendation-grid--adaptations');
+
+            function renderRecSkeleton(grid, count = 6, kind = 'series') {
+                if (!grid) return;
+                grid.innerHTML = '';
+                for (let i = 0; i < count; i++) {
+                    const card = document.createElement('article');
+                    card.className = `recommendation-card recommendation-card--${kind}`;
+                    card.innerHTML = `
+                        <div class=\"recommendation-card-media\" style=\"background: var(--surface-raised, #f3f4f6); height: ${kind === 'adaptation' ? 320 : (kind === 'series' ? 260 : 220)}px; border-radius: 16px;\"></div>
+                        <div class=\"recommendation-card-body\">
+                            <h3 style=\"background:#e5e7eb;height:1.1rem;border-radius:6px;width:60%\"></h3>
+                            <p style=\"background:#eef2f7;height:0.9rem;border-radius:6px;width:40%\"></p>
+                        </div>`;
+                    grid.appendChild(card);
+                }
+                applyRecommendationAnimations(grid);
+            }
+
+            async function loadSeries() {
+                if (!seriesGrid) return;
+                renderRecSkeleton(seriesGrid, 6, 'series');
+                try {
+                    const res = await fetch('/api/recommendations/series');
+                    if (!res.ok) throw new Error('Failed to load series');
+                    const items = await res.json();
+                    seriesGrid.innerHTML = '';
+                    (items || []).forEach((s) => {
+                        const card = document.createElement('article');
+                        card.className = 'recommendation-card recommendation-card--series';
+                        const cover = s.coverUrl || '/img/book-placeholder.svg';
+                        card.innerHTML = `
+                            <div class=\"recommendation-card-media\">\n                                <img src=\"${cover}\" alt=\"${s.title ?? ''} ${s.installment ?? ''}\" loading=\"lazy\" />\n                            </div>
+                            <div class=\"recommendation-card-body\">\n                                <h3>${s.title ?? ''}</h3>\n                                <p>${s.installment ?? ''}</p>\n                            </div>`;
+                        seriesGrid.appendChild(card);
+                    });
+                    applyRecommendationAnimations(seriesGrid);
+                } catch (_) {
+                    seriesGrid.innerHTML = '<p>Failed to load series suggestions.</p>';
+                }
+            }
+
+            async function loadAdaptations() {
+                if (!adaptationsGrid) return;
+                renderRecSkeleton(adaptationsGrid, 6, 'adaptation');
+                try {
+                    const res = await fetch('/api/recommendations/adaptations');
+                    if (!res.ok) throw new Error('Failed to load adaptations');
+                    const items = await res.json();
+                    adaptationsGrid.innerHTML = '';
+                    (items || []).forEach((a) => {
+                        const card = document.createElement('article');
+                        card.className = 'recommendation-card recommendation-card--adaptation';
+                        const image = a.imageUrl || '/img/book-placeholder.svg';
+                        const type = a.type || '';
+                        card.innerHTML = `
+                            <div class=\"recommendation-card-media\">\n                                <img src=\"${image}\" alt=\"${a.title ?? ''} poster\" loading=\"lazy\" />\n                                ${type ? `<span class=\"recommendation-tag\">${type}</span>` : ''}\n                            </div>
+                            <div class=\"recommendation-card-body\">\n                                <h3>${a.title ?? ''}</h3>\n                            </div>`;
+                        adaptationsGrid.appendChild(card);
+                    });
+                    applyRecommendationAnimations(adaptationsGrid);
+                } catch (_) {
+                    adaptationsGrid.innerHTML = '<p>Failed to load screen adaptations.</p>';
+                }
+            }
+
+            function ensureRecommendationsLoaded() {
+                if (recsLoaded) return;
+                recsLoaded = true;
+                loadSeries();
+                loadAdaptations();
+            }
 
             // Yearly Bestsellers panel logic
             let bestsellersLoaded = false;
@@ -956,6 +1063,24 @@
         .remarks-collection { margin-top: 1.5rem; }
         .remarks-collection-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .75rem; }
         .remarks-section-heading { margin: 0; font-size: 1.15rem; color: var(--gray-900); }
+
+        /* Grouped remarks layout */
+        .remarks-groups { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+        .remark-book-group { background: var(--surface); border-radius: 16px; padding: 1rem; box-shadow: 0 12px 24px rgba(15,23,42,.06); }
+        .remark-group-header { display: grid; grid-template-columns: auto 1fr auto; gap: .75rem; align-items: center; margin-bottom: .5rem; }
+        .remark-group-cover img { width: 72px; height: 96px; object-fit: cover; border-radius: 10px; box-shadow: 0 10px 18px rgba(15,23,42,.08); }
+        .remark-group-title { margin: 0; font-size: 1.05rem; color: var(--gray-900); }
+        .remark-group-author { margin: .15rem 0 0; color: var(--gray-600); font-size: .95rem; }
+        .remark-group-badge { background: var(--brand-50); color: var(--brand-700); font-weight: 700; padding: .25rem .6rem; border-radius: 999px; font-size: .85rem; white-space: nowrap; }
+        .remark-group-badge--community { background: var(--gray-200); color: var(--gray-800); }
+
+        .remark-list { display: grid; grid-template-columns: 1fr; }
+        .remark-item { padding: .6rem .25rem; border-top: 1px solid var(--gray-200); }
+        .remark-item:first-child { border-top: 0; }
+        .remark-item-title { margin: 0 0 .25rem; font-size: .95rem; color: var(--gray-800); font-weight: 700; }
+        .remark-item-content { margin: 0; color: var(--gray-800); line-height: 1.5; font-size: .95rem; }
+
+        /* Legacy (previous) card layout: keep for compatibility, no longer used here */
         .remarks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
         .remark-card { display: grid; grid-template-columns: 92px 1fr; gap: .75rem; background: var(--surface); border-radius: 14px; padding: .75rem; box-shadow: 0 10px 20px rgba(15,23,42,.06); }
         .remark-media img { width: 92px; height: 128px; object-fit: cover; border-radius: 10px; box-shadow: 0 10px 18px rgba(15,23,42,.08); }
