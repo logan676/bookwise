@@ -36,6 +36,8 @@ namespace BookWise.Web.Pages
         public IReadOnlyList<RecommendedAuthor> RecommendedAuthors { get; private set; } = Array.Empty<RecommendedAuthor>();
         public IReadOnlyList<RecommendedSeriesItem> RecommendedSeries { get; private set; } = Array.Empty<RecommendedSeriesItem>();
         public IReadOnlyList<RecommendedAdaptation> RecommendedAdaptations { get; private set; } = Array.Empty<RecommendedAdaptation>();
+        public IReadOnlyList<RemarkItem> MyRecentRemarks { get; private set; } = Array.Empty<RemarkItem>();
+        public IReadOnlyList<RemarkItem> CommunityRecentRemarks { get; private set; } = Array.Empty<RemarkItem>();
 
         public async Task OnGetAsync()
         {
@@ -43,6 +45,7 @@ namespace BookWise.Web.Pages
             var cancellationToken = HttpContext.RequestAborted;
             Authors = await LoadAuthorsAsync(cancellationToken);
             (QuoteOfTheDay, GroupedQuotes) = await LoadQuotesAsync(cancellationToken);
+            (MyRecentRemarks, CommunityRecentRemarks) = await LoadRemarksAsync(cancellationToken);
             RecommendedAuthors = await LoadRecommendedAuthorsAsync(cancellationToken);
             RecommendedSeries = await LoadRecommendedSeriesAsync(cancellationToken);
             RecommendedAdaptations = await LoadRecommendedAdaptationsAsync(cancellationToken);
@@ -294,8 +297,7 @@ namespace BookWise.Web.Pages
             // Load a bounded set of the most recent quotes, projecting only required fields
             var quotes = await _context.BookQuotes
                 .AsNoTracking()
-                .OrderByDescending(q => q.AddedOn)
-                .Take(MaxRecentQuotes)
+                // SQLite cannot ORDER BY DateTimeOffset; fetch then sort client-side
                 .Select(q => new
                 {
                     q.Text,
@@ -309,6 +311,12 @@ namespace BookWise.Web.Pages
                     BookCover = q.Book != null ? q.Book.CoverImageUrl : null
                 })
                 .ToListAsync(cancellationToken);
+
+            // Order by AddedOn on the client to avoid SQLite DateTimeOffset limitation
+            quotes = quotes
+                .OrderByDescending(q => q.AddedOn)
+                .Take(MaxRecentQuotes)
+                .ToList();
 
             if (quotes.Count == 0)
             {
@@ -361,6 +369,65 @@ namespace BookWise.Web.Pages
                 .ToList();
 
             return (quoteOfTheDay, groups);
+        }
+
+        private async Task<(IReadOnlyList<RemarkItem> Mine, IReadOnlyList<RemarkItem> Community)> LoadRemarksAsync(CancellationToken cancellationToken)
+        {
+            // Project minimal fields to avoid selecting entire entities
+            var remarks = await _context.BookRemarks
+                .AsNoTracking()
+                .Select(r => new
+                {
+                    r.Title,
+                    r.Content,
+                    r.AddedOn,
+                    r.Type,
+                    BookTitle = r.Book != null ? r.Book.Title : null,
+                    BookAuthor = r.Book != null ? r.Book.Author : null,
+                    BookCover = r.Book != null ? r.Book.CoverImageUrl : null
+                })
+                .ToListAsync(cancellationToken);
+
+            if (remarks.Count == 0)
+            {
+                return (Array.Empty<RemarkItem>(), Array.Empty<RemarkItem>());
+            }
+
+            // Order by AddedOn client-side (SQLite limitation with DateTimeOffset)
+            var ordered = remarks
+                .OrderByDescending(r => r.AddedOn)
+                .ToList();
+
+            // Cap totals to keep Explore fast and light
+            var mine = ordered
+                .Where(r => r.Type == BookRemarkType.Mine)
+                .Take(24)
+                .Select(r => new RemarkItem
+                {
+                    BookTitle = string.IsNullOrWhiteSpace(r.BookTitle) ? "Unknown Book" : r.BookTitle!,
+                    BookAuthor = string.IsNullOrWhiteSpace(r.BookAuthor) ? "Unknown Author" : r.BookAuthor!,
+                    CoverImageUrl = string.IsNullOrWhiteSpace(r.BookCover) ? "/img/book-placeholder.svg" : r.BookCover!,
+                    Title = string.IsNullOrWhiteSpace(r.Title) ? "Personal Remark" : r.Title!,
+                    Content = TrimToLength(r.Content ?? string.Empty, 280),
+                    AddedOn = r.AddedOn.UtcDateTime
+                })
+                .ToList();
+
+            var community = ordered
+                .Where(r => r.Type == BookRemarkType.Community)
+                .Take(24)
+                .Select(r => new RemarkItem
+                {
+                    BookTitle = string.IsNullOrWhiteSpace(r.BookTitle) ? "Unknown Book" : r.BookTitle!,
+                    BookAuthor = string.IsNullOrWhiteSpace(r.BookAuthor) ? "Unknown Author" : r.BookAuthor!,
+                    CoverImageUrl = string.IsNullOrWhiteSpace(r.BookCover) ? "/img/book-placeholder.svg" : r.BookCover!,
+                    Title = string.IsNullOrWhiteSpace(r.Title) ? "Community Remark" : r.Title!,
+                    Content = TrimToLength(r.Content ?? string.Empty, 280),
+                    AddedOn = r.AddedOn.UtcDateTime
+                })
+                .ToList();
+
+            return (mine, community);
         }
 
         private RecommendedAuthor MapToRecommendedAuthor(AuthorRecommendation recommendation)
@@ -558,6 +625,16 @@ namespace BookWise.Web.Pages
             public string BookAuthor { get; init; } = string.Empty;
             public string CoverImageUrl { get; init; } = "/img/book-placeholder.svg";
             public IReadOnlyList<QuoteCard> Quotes { get; init; } = Array.Empty<QuoteCard>();
+        }
+
+        public class RemarkItem
+        {
+            public string BookTitle { get; init; } = string.Empty;
+            public string BookAuthor { get; init; } = string.Empty;
+            public string CoverImageUrl { get; init; } = "/img/book-placeholder.svg";
+            public string Title { get; init; } = string.Empty;
+            public string Content { get; init; } = string.Empty;
+            public DateTime AddedOn { get; init; }
         }
 
         public class RecommendedAuthor

@@ -28,6 +28,15 @@
         </button>
         <button type="button"
                 class="explore-top-tab"
+                id="explore-tab-remarks"
+                role="tab"
+                aria-controls="explore-pane-remarks"
+                aria-selected="false"
+                data-explore-tab="remarks">
+            Remarks
+        </button>
+        <button type="button"
+                class="explore-top-tab"
                 id="explore-tab-recommendations"
                 role="tab"
                 aria-controls="explore-pane-recommendations"
@@ -280,6 +289,92 @@
                             </article>
                         }
                     }
+                </section>
+            </div>
+        </section>
+
+        <section id="explore-pane-remarks"
+                 class="explore-top-panel"
+                 role="tabpanel"
+                 aria-labelledby="explore-tab-remarks"
+                 data-explore-tab="remarks"
+                 hidden>
+            <div class="remarks-page">
+                <header class="remarks-header">
+                    <p class="remarks-kicker">Reader Remarks</p>
+                    <h1 class="remarks-title">Fresh thoughts from you and the community</h1>
+                </header>
+
+                <section class="remarks-collection">
+                    <div class="remarks-collection-header">
+                        <h2 class="remarks-section-heading">Your Recent Remarks</h2>
+                        <p>Private notes you’ve saved while adding books.</p>
+                    </div>
+                    <div class="remarks-grid">
+                        @if (!Model.MyRecentRemarks.Any())
+                        {
+                            <p class="empty-hint">No personal remarks yet. Add one when saving a book.</p>
+                        }
+                        else
+                        {
+                            @foreach (var remark in Model.MyRecentRemarks)
+                            {
+                                <article class="remark-card">
+                                    <div class="remark-media">
+                                        <img src="@remark.CoverImageUrl" alt="@remark.BookTitle cover" loading="lazy" />
+                                    </div>
+                                    <div class="remark-body">
+                                        <h3 class="remark-book-title">@remark.BookTitle</h3>
+                                        <p class="remark-book-author">@remark.BookAuthor</p>
+                                        <p class="remark-content">@remark.Content</p>
+                                        <footer class="remark-footer">
+                                            <span class="remark-badge">Mine</span>
+                                            @if (!string.IsNullOrWhiteSpace(remark.Title))
+                                            {
+                                                <span class="remark-title">@remark.Title</span>
+                                            }
+                                        </footer>
+                                    </div>
+                                </article>
+                            }
+                        }
+                    </div>
+                </section>
+
+                <section class="remarks-collection">
+                    <div class="remarks-collection-header">
+                        <h2 class="remarks-section-heading">Community Picks</h2>
+                        <p>Short, popular comments from Douban readers.</p>
+                    </div>
+                    <div class="remarks-grid">
+                        @if (!Model.CommunityRecentRemarks.Any())
+                        {
+                            <p class="empty-hint">No community remarks yet. Add a book with a Douban link to fetch them.</p>
+                        }
+                        else
+                        {
+                            @foreach (var remark in Model.CommunityRecentRemarks)
+                            {
+                                <article class="remark-card">
+                                    <div class="remark-media">
+                                        <img src="@remark.CoverImageUrl" alt="@remark.BookTitle cover" loading="lazy" />
+                                    </div>
+                                    <div class="remark-body">
+                                        <h3 class="remark-book-title">@remark.BookTitle</h3>
+                                        <p class="remark-book-author">@remark.BookAuthor</p>
+                                        <p class="remark-content">@remark.Content</p>
+                                        <footer class="remark-footer">
+                                            <span class="remark-badge remark-badge--community">Community</span>
+                                            @if (!string.IsNullOrWhiteSpace(remark.Title))
+                                            {
+                                                <span class="remark-title">@remark.Title</span>
+                                            }
+                                        </footer>
+                                    </div>
+                                </article>
+                            }
+                        }
+                    </div>
                 </section>
             </div>
         </section>
@@ -852,5 +947,24 @@
             50% { opacity: .6; }
             100% { opacity: 1; }
         }
+
+        /* Remarks styles */
+        .remarks-page { width: min(var(--layout-max-width), 94%); margin: 0 auto; padding: 2rem 0 3.5rem; }
+        .remarks-header { text-align: center; margin-bottom: 1.75rem; }
+        .remarks-kicker { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.18em; color: var(--brand-600); font-weight: 700; margin-bottom: .6rem; }
+        .remarks-title { font-size: clamp(2rem, 4vw, 3rem); margin: 0; color: var(--gray-900); }
+        .remarks-collection { margin-top: 1.5rem; }
+        .remarks-collection-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .75rem; }
+        .remarks-section-heading { margin: 0; font-size: 1.15rem; color: var(--gray-900); }
+        .remarks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+        .remark-card { display: grid; grid-template-columns: 92px 1fr; gap: .75rem; background: var(--surface); border-radius: 14px; padding: .75rem; box-shadow: 0 10px 20px rgba(15,23,42,.06); }
+        .remark-media img { width: 92px; height: 128px; object-fit: cover; border-radius: 10px; box-shadow: 0 10px 18px rgba(15,23,42,.08); }
+        .remark-book-title { margin: 0; font-size: 1rem; color: var(--gray-900); }
+        .remark-book-author { margin: .2rem 0 .4rem; color: var(--gray-600); font-size: .95rem; }
+        .remark-content { margin: .25rem 0 .5rem; color: var(--gray-800); line-height: 1.4; font-size: .95rem; }
+        .remark-footer { display: flex; gap: .5rem; align-items: center; color: var(--gray-600); font-size: .85rem; }
+        .remark-badge { background: var(--brand-50); color: var(--brand-700); font-weight: 600; padding: .15rem .5rem; border-radius: 999px; }
+        .remark-badge--community { background: var(--gray-200); color: var(--gray-800); }
+        .remark-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 16rem; }
     </style>
 }

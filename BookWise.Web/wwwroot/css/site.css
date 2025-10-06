@@ -3579,7 +3579,8 @@ a:hover {
   max-width: var(--layout-max-width);
   width: 100%;
   margin: 0 auto;
-  padding: 3rem 1.5rem 4rem;
+  /* Unify top spacing across Explore tabs */
+  padding: 2rem 1.5rem 3.5rem;
   justify-content: flex-start;
 }
 
@@ -3757,6 +3758,11 @@ a:hover {
   gap: 3rem;
   width: 100%;
   min-width: 0;
+}
+
+/* Ensure comfortable spacing between consecutive sections in author pane */
+.author-details-pane > section + section {
+  margin-top: 2.5rem;
 }
 
 .author-details-pane {
@@ -5402,7 +5408,8 @@ a:hover {
 .recommendations-content {
   width: min(var(--layout-max-width), 94%);
   margin: 0 auto;
-  padding: 0 0 3.5rem;
+  /* Add consistent top padding to match other tabs */
+  padding: 2rem 0 3.5rem;
   display: flex;
   flex-direction: column;
   gap: 3.5rem;
