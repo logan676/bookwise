@@ -29,11 +29,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
+      - name: Setup .NET SDK (with cache)
+        if: ${{ hashFiles('**/packages.lock.json') != '' }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           cache: true
+
+      - name: Setup .NET SDK (no cache)
+        if: ${{ hashFiles('**/packages.lock.json') == '' }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Restore, Build, Publish
         run: |
@@ -145,4 +152,3 @@ jobs:
           done
           echo "Production failed health check after swap" >&2
           exit 1
-

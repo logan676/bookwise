@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Generate NuGet lock files (packages.lock.json) on restore -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
+

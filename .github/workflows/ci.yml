@@ -21,11 +21,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8 SDK
+      - name: Setup .NET 8 SDK (with cache)
+        if: ${{ hashFiles('**/packages.lock.json') != '' }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
           cache: true
+
+      - name: Setup .NET 8 SDK (no cache)
+        if: ${{ hashFiles('**/packages.lock.json') == '' }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Show dotnet info
         run: dotnet --info
@@ -59,11 +66,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 8 SDK
+      - name: Setup .NET 8 SDK (with cache)
+        if: ${{ hashFiles('**/packages.lock.json') != '' }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
           cache: true
+
+      - name: Setup .NET 8 SDK (no cache)
+        if: ${{ hashFiles('**/packages.lock.json') == '' }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
       - name: Restore and Build
         run: |
