@@ -128,6 +128,9 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
+// Lightweight health endpoint for Azure slot warmup and CI
+app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+
 var books = app.MapGroup("/api/books");
 var authors = app.MapGroup("/api/authors");
 var rankings = app.MapGroup("/api/rankings");

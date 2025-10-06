@@ -1,0 +1,148 @@
+name: Deploy to Azure (Staging ➜ Prod)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write   # required for OIDC
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  AZURE_SLOT_NAME: staging
+  HEALTH_CHECK_PATH: /healthz
+
+jobs:
+  deploy:
+    name: Deploy to Azure App Service (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+          cache: true
+
+      - name: Restore, Build, Publish
+        run: |
+          dotnet restore BookWise.sln
+          dotnet build BookWise.sln --configuration Release --no-restore
+          dotnet publish BookWise.Web/BookWise.Web.csproj --configuration Release -o ./publish
+          cd publish
+          zip -r ../package.zip .
+          cd -
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate inputs
+        shell: bash
+        run: |
+          : "Ensure required variables are present"
+          test -n "${AZURE_WEBAPP_NAME}" || { echo "Missing vars.AZURE_WEBAPP_NAME" >&2; exit 1; }
+          test -n "${AZURE_RESOURCE_GROUP}" || { echo "Missing vars.AZURE_RESOURCE_GROUP" >&2; exit 1; }
+          test -n "${AZURE_SLOT_NAME}" || { echo "Missing AZURE_SLOT_NAME env" >&2; exit 1; }
+          test -f package.zip || { echo "package.zip not found" >&2; ls -la; exit 1; }
+
+      - name: Ensure staging slot exists
+        shell: bash
+        run: |
+          set -e
+          if az webapp deployment slot show \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}" \
+            --slot "${AZURE_SLOT_NAME}" >/dev/null 2>&1; then
+            echo "Slot ${AZURE_SLOT_NAME} already exists"
+          else
+            echo "Creating slot ${AZURE_SLOT_NAME} (copy config from production)"
+            az webapp deployment slot create \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --name "${AZURE_WEBAPP_NAME}" \
+              --slot "${AZURE_SLOT_NAME}" \
+              --configuration-source "${AZURE_WEBAPP_NAME}"
+          fi
+
+      - name: Configure health check path (prod + staging)
+        shell: bash
+        run: |
+          az webapp config set \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}" \
+            --generic-configurations "{\"healthCheckPath\":\"${HEALTH_CHECK_PATH}\"}"
+          az webapp config set \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}" \
+            --slot "${AZURE_SLOT_NAME}" \
+            --generic-configurations "{\"healthCheckPath\":\"${HEALTH_CHECK_PATH}\"}"
+
+      - name: Deploy to staging slot (zip)
+        run: |
+          az webapp deploy \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}" \
+            --slot "${AZURE_SLOT_NAME}" \
+            --type zip \
+            --src-path package.zip \
+            --target-path site/wwwroot \
+            --async false
+
+      - name: Warm up and health check (staging)
+        shell: bash
+        env:
+          SLOT_URL: https://${{ env.AZURE_WEBAPP_NAME }}-${{ env.AZURE_SLOT_NAME }}.azurewebsites.net${{ env.HEALTH_CHECK_PATH }}
+        run: |
+          echo "Probing: ${SLOT_URL}"
+          for i in {1..90}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "${SLOT_URL}") || code=000
+            if [[ "$code" == "200" ]]; then
+              echo "Staging healthy (HTTP 200)"
+              exit 0
+            fi
+            if (( i % 10 == 0 )); then echo "Waiting... ($i) last=$code"; fi
+            sleep 2
+          done
+          echo "Staging slot failed health check" >&2
+          exit 1
+
+      - name: Swap staging ➜ production
+        run: |
+          az webapp deployment slot swap \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}" \
+            --slot "${AZURE_SLOT_NAME}" \
+            --target-slot production
+
+      - name: Verify production health
+        if: ${{ success() }}
+        shell: bash
+        env:
+          PROD_URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net${{ env.HEALTH_CHECK_PATH }}
+        run: |
+          echo "Probing: ${PROD_URL}"
+          for i in {1..60}; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}") || code=000
+            if [[ "$code" == "200" ]]; then
+              echo "Production healthy (HTTP 200)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Production failed health check after swap" >&2
+          exit 1
+
