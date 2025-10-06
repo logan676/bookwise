@@ -6322,7 +6322,8 @@ a:hover {
   margin-bottom: 1.2rem;
 }
 
-.quote-feature {
+/* Scope Book Details quote styles to avoid overriding Explore Quotes tab */
+.book-panel--quote .quote-feature {
   margin: 0;
   padding: 2rem 2.25rem;
   border-radius: 18px;
@@ -6337,7 +6338,7 @@ a:hover {
   gap: 1rem;
 }
 
-.quote-feature-text {
+.book-panel--quote .quote-feature-text {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
@@ -6345,7 +6346,7 @@ a:hover {
   line-height: 1.7;
 }
 
-.quote-feature-meta {
+.book-panel--quote .quote-feature-meta {
   margin: 0;
   font-size: 0.85rem;
   color: var(--gray-500);
