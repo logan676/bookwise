@@ -36,6 +36,7 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           cache: true
+          cache-dependency-path: '**/packages.lock.json'
 
       - name: Setup .NET SDK (no cache)
         if: ${{ hashFiles('**/packages.lock.json') == '' }}
