@@ -97,3 +97,15 @@ All endpoints return standard HTTP status codes. Validation failures emit RFC 78
 - **Static assets seem stale** – When not using `dotnet watch`, clear your browser cache or restart the app so CSS/JS changes are re-served.
 
 Feel free to tailor the UI, expand the book schema, or replace the Add Book stub with a real search integration.
+
+## Health Check
+- Endpoint: `/healthz` is mapped via `app.MapHealthChecks("/healthz")` in `BookWise.Web/Program.cs`.
+- Local test:
+  - `curl -i http://localhost:5240/healthz`
+  - Expects HTTP 200 when the app is healthy.
+- Azure Web App/Slot configuration:
+  - In the Azure Portal, open your Web App (or `Deployment slots` → select the `staging` slot).
+  - Go to `Monitoring` → `Health check`.
+  - Toggle `Enable/On`.
+  - Set `Path` to `/healthz` (must start with `/`).
+  - Save. Azure will probe the endpoint and use it for slot warmup and restarts.

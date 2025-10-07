@@ -29,6 +29,7 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 builder.Services.AddRazorPages();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHealthChecks();
 
 // Register avatar cache service with a dedicated HttpClient
 builder.Services.AddHttpClient<IAvatarCacheService, AvatarCacheService>("AvatarCache", client =>
@@ -128,8 +129,8 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
-// Lightweight health endpoint for Azure slot warmup and CI
-app.MapGet("/healthz", () => Results.Ok(new { status = "ok" }));
+// Health check endpoint for Azure slot health monitoring
+app.MapHealthChecks("/healthz");
 
 var books = app.MapGroup("/api/books");
 var authors = app.MapGroup("/api/authors");
