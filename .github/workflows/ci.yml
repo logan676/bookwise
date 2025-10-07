@@ -104,7 +104,7 @@ jobs:
 
       - name: Launch application
         run: |
-          nohup dotnet run --project BookWise.Web/BookWise.Web.csproj --no-build --urls "http://localhost:5062" > app.log 2>&1 &
+          nohup dotnet run --project BookWise.Web/BookWise.Web.csproj --configuration Release --no-build --urls "http://localhost:5062" > app.log 2>&1 &
           echo $! > app.pid
 
       - name: Wait for readiness
