@@ -29,6 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Setup .NET SDK (prefer cache when packages.lock.json exists)
       - name: Setup .NET SDK (with cache)
         if: ${{ hashFiles('**/packages.lock.json') != '' }}
         uses: actions/setup-dotnet@v4
@@ -85,18 +86,48 @@ jobs:
               --configuration-source "${AZURE_WEBAPP_NAME}"
           fi
 
+      # Robust health-check configuration with fallback for older az versions
       - name: Configure health check path (prod + staging)
         shell: bash
         run: |
+          set -e
+          echo "Configuring health check path to ${HEALTH_CHECK_PATH} (prod + slot)"
+          set +e
           az webapp config set \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
             --name "${AZURE_WEBAPP_NAME}" \
             --generic-configurations "{\"healthCheckPath\":\"${HEALTH_CHECK_PATH}\"}"
+          PROD_RC=$?
           az webapp config set \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
             --name "${AZURE_WEBAPP_NAME}" \
             --slot "${AZURE_SLOT_NAME}" \
             --generic-configurations "{\"healthCheckPath\":\"${HEALTH_CHECK_PATH}\"}"
+          STG_RC=$?
+          set -e
+          if [ $PROD_RC -ne 0 ]; then
+            echo "generic-configurations failed for prod; falling back to ARM patch"
+            az resource update \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --resource-type "Microsoft.Web/sites/config" \
+              --name "${AZURE_WEBAPP_NAME}/web" \
+              --set properties.healthCheckPath="${HEALTH_CHECK_PATH}"
+          fi
+          if [ $STG_RC -ne 0 ]; then
+            echo "generic-configurations failed for slot; falling back to ARM patch"
+            az resource update \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --resource-type "Microsoft.Web/sites/slots/config" \
+              --name "${AZURE_WEBAPP_NAME}/${AZURE_SLOT_NAME}/web" \
+              --set properties.healthCheckPath="${HEALTH_CHECK_PATH}"
+          fi
+
+      # (Optional but recommended) Keep app warm and responsive
+      - name: Ensure Always On (prod + staging)
+        shell: bash
+        run: |
+          az webapp config set -g "${AZURE_RESOURCE_GROUP}" -n "${AZURE_WEBAPP_NAME}" --always-on true
+          az webapp config set -g "${AZURE_RESOURCE_GROUP}" -n "${AZURE_WEBAPP_NAME}" --slot "${AZURE_SLOT_NAME}" --always-on true
 
       - name: Deploy to staging slot (zip)
         run: |
@@ -109,22 +140,51 @@ jobs:
             --target-path site/wwwroot \
             --async false
 
+      # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+      # From here: dynamic host discovery + reliable warmup/probe
+      # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+      - name: Get WebApp hostnames (prod + staging)
+        id: host
+        shell: bash
+        run: |
+          set -e
+          PROD_HOST=$(az webapp show -g "${AZURE_RESOURCE_GROUP}" -n "${AZURE_WEBAPP_NAME}" --query defaultHostName -o tsv)
+          STG_HOST=$(az webapp show -g "${AZURE_RESOURCE_GROUP}" -n "${AZURE_WEBAPP_NAME}" --slot "${AZURE_SLOT_NAME}" --query defaultHostName -o tsv)
+          echo "prod_url=https://$PROD_HOST" >> "$GITHUB_OUTPUT"
+          echo "stg_url=https://$STG_HOST" >> "$GITHUB_OUTPUT"
+          echo "Prod URL: https://$PROD_HOST"
+          echo "Staging URL: https://$STG_HOST"
+
+      - name: Ensure staging slot is started
+        shell: bash
+        run: |
+          STATE=$(az webapp show -g "${AZURE_RESOURCE_GROUP}" -n "${AZURE_WEBAPP_NAME}" --slot "${AZURE_SLOT_NAME}" --query state -o tsv || echo "")
+          if [ "$STATE" != "Running" ]; then
+            echo "Slot state=$STATE, starting..."
+            az webapp start -g "${AZURE_RESOURCE_GROUP}" -n "${AZURE_WEBAPP_NAME}" --slot "${AZURE_SLOT_NAME}"
+          fi
+
       - name: Warm up and health check (staging)
         shell: bash
-        env:
-          SLOT_URL: https://${{ env.AZURE_WEBAPP_NAME }}-${{ env.AZURE_SLOT_NAME }}.azurewebsites.net${{ env.HEALTH_CHECK_PATH }}
         run: |
-          echo "Probing: ${SLOT_URL}"
-          for i in {1..90}; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "${SLOT_URL}") || code=000
-            if [[ "$code" == "200" ]]; then
+          set -e
+          URL="${{ steps.host.outputs.stg_url }}${HEALTH_CHECK_PATH}"
+          echo "Probing: $URL"
+          # Retry up to ~90s, 2s interval. Force IPv4 to avoid rare IPv6 quirks.
+          for i in {1..45}; do
+            if curl -4 -Ssf --connect-timeout 5 "$URL" -D - -o /dev/null; then
               echo "Staging healthy (HTTP 200)"
               exit 0
             fi
-            if (( i % 10 == 0 )); then echo "Waiting... ($i) last=$code"; fi
+            if (( i % 5 == 0 )); then echo "Waiting... ($((i*2))s)"; fi
             sleep 2
           done
           echo "Staging slot failed health check" >&2
+          echo "Verbose curl for debugging:"
+          curl -4 -v "$URL" || true
+          echo "Access restrictions (if any):"
+          az webapp config access-restriction show -g "${AZURE_RESOURCE_GROUP}" -n "${AZURE_WEBAPP_NAME}" --slot "${AZURE_SLOT_NAME}" || true
           exit 1
 
       - name: Swap staging ➜ production
@@ -138,17 +198,17 @@ jobs:
       - name: Verify production health
         if: ${{ success() }}
         shell: bash
-        env:
-          PROD_URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net${{ env.HEALTH_CHECK_PATH }}
         run: |
-          echo "Probing: ${PROD_URL}"
+          set -e
+          URL="${{ steps.host.outputs.prod_url }}${HEALTH_CHECK_PATH}"
+          echo "Probing: $URL"
           for i in {1..60}; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" "${PROD_URL}") || code=000
-            if [[ "$code" == "200" ]]; then
+            if curl -4 -Ssf --connect-timeout 5 "$URL" -D - -o /dev/null; then
               echo "Production healthy (HTTP 200)"
               exit 0
             fi
             sleep 2
           done
           echo "Production failed health check after swap" >&2
+          curl -4 -v "$URL" || true
           exit 1
