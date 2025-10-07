@@ -127,8 +127,18 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-// Super-lightweight liveness endpoint for Azure/CI probes - must be mapped before other routes
-app.MapGet("/healthz", () => Results.Ok("OK")).AllowAnonymous();
+// Health check endpoints - map early and with explicit routing
+app.UseEndpoints(endpoints =>
+{
+    // Primary health endpoint for Azure/CI probes
+    endpoints.MapGet("/healthz", () => Results.Ok("OK")).AllowAnonymous();
+    
+    // Alternative health endpoint as fallback
+    endpoints.MapGet("/health", () => Results.Ok("Healthy")).AllowAnonymous();
+    
+    // Simple ping endpoint
+    endpoints.MapGet("/ping", () => Results.Ok("pong")).AllowAnonymous();
+});
 
 app.MapRazorPages();
 
