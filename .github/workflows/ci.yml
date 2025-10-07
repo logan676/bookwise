@@ -15,12 +15,14 @@ concurrency:
 
 jobs:
   build:
-    name: Build (.NET 8)
+    name: Build & Test (.NET 8)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Prefer NuGet cache only when packages.lock.json exists
       - name: Setup .NET 8 SDK (with cache)
         if: ${{ hashFiles('**/packages.lock.json') != '' }}
         uses: actions/setup-dotnet@v4
@@ -53,9 +55,23 @@ jobs:
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Test
+      - name: Test (with TRX logs)
         if: steps.detect_tests.outputs.has_tests == 'true'
-        run: dotnet test BookWise.sln --configuration Release --no-build --verbosity normal
+        run: |
+          dotnet test BookWise.sln \
+            --configuration Release \
+            --no-build \
+            --logger "trx;LogFileName=test-results.trx" \
+            --results-directory ./TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            TestResults/**/*.trx
+          if-no-files-found: ignore
 
   smoke:
     name: API Smoke Test
@@ -86,7 +102,7 @@ jobs:
 
       - name: Launch application
         run: |
-          nohup dotnet run --project BookWise.Web/BookWise.Web.csproj --urls "http://localhost:5062" > app.log 2>&1 &
+          nohup dotnet run --project BookWise.Web/BookWise.Web.csproj --no-build --urls "http://localhost:5062" > app.log 2>&1 &
           echo $! > app.pid
 
       - name: Wait for readiness
@@ -143,10 +159,16 @@ jobs:
             app.log
             books.json
             response.json
+          if-no-files-found: ignore
 
       - name: Stop application
         if: always()
+        shell: bash
         run: |
           if [[ -f app.pid ]]; then
-            kill $(cat app.pid) || true
+            PID=$(cat app.pid)
+            kill "$PID" 2>/dev/null || true
+            # Give it a moment to exit gracefully
+            sleep 2
+            kill -9 "$PID" 2>/dev/null || true
           fi
