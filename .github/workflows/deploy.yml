@@ -141,7 +141,6 @@ jobs:
             --slot "${AZURE_SLOT_NAME}" \
             --type zip \
             --src-path package.zip \
-            --target-path site/wwwroot \
             --async false
 
       # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
