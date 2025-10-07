@@ -127,10 +127,10 @@ app.UseRouting();
 
 app.UseAuthorization();
 
-app.MapRazorPages();
-
-// Super-lightweight liveness endpoint for Azure/CI probes
+// Super-lightweight liveness endpoint for Azure/CI probes - must be mapped before other routes
 app.MapGet("/healthz", () => Results.Ok("OK")).AllowAnonymous();
+
+app.MapRazorPages();
 
 var books = app.MapGroup("/api/books");
 var authors = app.MapGroup("/api/authors");
