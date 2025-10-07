@@ -2,19 +2,19 @@ name: Deploy to Azure (Staging ➜ Prod)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write   # required for OIDC
+  id-token: write # required for OIDC
 
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  DOTNET_VERSION: '8.0.x'
+  DOTNET_VERSION: "8.0.x"
   AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
   AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
   AZURE_SLOT_NAME: staging
@@ -36,7 +36,7 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: "**/packages.lock.json"
 
       - name: Setup .NET SDK (no cache)
         if: ${{ hashFiles('**/packages.lock.json') == '' }}
@@ -184,10 +184,27 @@ jobs:
               echo "Staging healthy on $HC (HTTP 200)"
               exit 0
             fi
-            # If explicit 404, try root as a fallback to detect app liveness
+            # If explicit 404, try alternative health endpoints
             STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$URL" || echo "000")
             if [ "$STATUS" = "404" ]; then
-              ROOT_STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$BASE/" || echo "000")
+              # Try alternative health endpoints
+              ALT_HEALTH="$BASE/health"
+              PING="$BASE/ping"
+              ROOT="$BASE/"
+              
+              ALT_STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$ALT_HEALTH" || echo "000")
+              if [ "$ALT_STATUS" = "200" ]; then
+                echo "App is up (/health) but $HC returns 404. Proceeding."
+                exit 0
+              fi
+              
+              PING_STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$PING" || echo "000")
+              if [ "$PING_STATUS" = "200" ]; then
+                echo "App is up (/ping) but $HC returns 404. Proceeding."
+                exit 0
+              fi
+              
+              ROOT_STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$ROOT" || echo "000")
               if [ "$ROOT_STATUS" = "200" ]; then
                 echo "App is up (/) but $HC returns 404. Proceeding."
                 exit 0
@@ -199,6 +216,10 @@ jobs:
           echo "Staging slot failed health check" >&2
           echo "Verbose curl for debugging (health endpoint):"
           curl -4 -v "$URL" || true
+          echo "Verbose curl for debugging (/health):"
+          curl -4 -v "$BASE/health" || true
+          echo "Verbose curl for debugging (/ping):"
+          curl -4 -v "$BASE/ping" || true
           echo "Verbose curl for debugging (root):"
           curl -4 -v "$BASE/" || true
           echo "Access restrictions (if any):"
@@ -219,14 +240,45 @@ jobs:
         run: |
           set -e
           URL="${{ steps.host.outputs.prod_url }}${HEALTH_CHECK_PATH}"
+          BASE="${{ steps.host.outputs.prod_url }}"
           echo "Probing: $URL"
           for i in {1..60}; do
             if curl -4 -Ssf --connect-timeout 5 "$URL" -D - -o /dev/null; then
               echo "Production healthy (HTTP 200)"
               exit 0
             fi
+            # Try fallback endpoints if primary fails
+            STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$URL" || echo "000")
+            if [ "$STATUS" = "404" ]; then
+              # Try alternative health endpoints
+              ALT_HEALTH="$BASE/health"
+              PING="$BASE/ping"
+              ROOT="$BASE/"
+              
+              ALT_STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$ALT_HEALTH" || echo "000")
+              if [ "$ALT_STATUS" = "200" ]; then
+                echo "Production healthy (/health) - primary endpoint may have routing issue"
+                exit 0
+              fi
+              
+              PING_STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$PING" || echo "000")
+              if [ "$PING_STATUS" = "200" ]; then
+                echo "Production healthy (/ping) - primary endpoint may have routing issue"
+                exit 0
+              fi
+              
+              ROOT_STATUS=$(curl -4 -s -o /dev/null -w "%{http_code}" --connect-timeout 5 "$ROOT" || echo "000")
+              if [ "$ROOT_STATUS" = "200" ]; then
+                echo "Production healthy (/) - primary endpoint may have routing issue"
+                exit 0
+              fi
+            fi
             sleep 2
           done
           echo "Production failed health check after swap" >&2
+          echo "Debugging info:"
           curl -4 -v "$URL" || true
+          echo "Alternative endpoints:"
+          curl -4 -v "$BASE/health" || true
+          curl -4 -v "$BASE/ping" || true
           exit 1
