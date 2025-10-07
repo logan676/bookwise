@@ -129,8 +129,8 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 
-// Health check endpoint for Azure slot health monitoring
-app.MapHealthChecks("/healthz");
+// Super-lightweight liveness endpoint for Azure/CI probes
+app.MapGet("/healthz", () => Results.Ok("OK")).AllowAnonymous();
 
 var books = app.MapGroup("/api/books");
 var authors = app.MapGroup("/api/authors");
