@@ -38,6 +38,12 @@ builder.Services.AddHttpClient<IAvatarCacheService, AvatarCacheService>("AvatarC
     client.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 Avatar Cache (+https://bookwise.local)");
 });
 
+builder.Services.AddHttpClient<ICoverImageCacheService, CoverImageCacheService>("CoverCache", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("BookWise/1.0 Cover Cache (+https://bookwise.local)");
+});
+
 // Add content type provider for serving cached images
 builder.Services.AddSingleton<Microsoft.AspNetCore.StaticFiles.IContentTypeProvider, Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider>();
 
@@ -146,6 +152,32 @@ var books = app.MapGroup("/api/books");
 var authors = app.MapGroup("/api/authors");
 var rankings = app.MapGroup("/api/rankings");
 var recommendations = app.MapGroup("/api/recommendations");
+var images = app.MapGroup("/api/images");
+
+images.MapGet("/cover", async (
+    [FromQuery] string src,
+    ICoverImageCacheService coverCache,
+    ILogger<Program> logger,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(src))
+    {
+        return Results.BadRequest(new { error = "Missing src parameter." });
+    }
+
+    var cached = await coverCache.GetOrAddAsync(src, cancellationToken);
+    if (cached is null)
+    {
+        logger.LogWarning("[Images] Unable to proxy cover from {Source}", src);
+        return Results.NotFound();
+    }
+
+    return Results.File(
+        path: cached.FilePath,
+        contentType: cached.ContentType,
+        lastModified: cached.LastModified,
+        enableRangeProcessing: true);
+}).WithName("ProxyCoverImage");
 
 rankings.MapGet("/annual", async (
     [FromQuery] int year,

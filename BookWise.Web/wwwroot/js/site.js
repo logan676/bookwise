@@ -551,10 +551,74 @@
 
   }
 
+  function initMobileNav() {
+    const header = document.querySelector(".top-nav");
+    const toggle = document.querySelector(".nav-toggle");
+    const navigation = document.getElementById("primary-navigation");
+    const overlay = document.querySelector("[data-nav-overlay]");
+    const body = document.body;
+
+    if (!header || !toggle || !navigation) {
+      return;
+    }
+
+    const closeNav = () => {
+      toggle.setAttribute("aria-expanded", "false");
+      header.classList.remove("is-mobile-open");
+      header.dataset.navOpen = "false";
+      overlay?.setAttribute("hidden", "");
+      body.classList.remove("nav-lock");
+    };
+
+    const openNav = () => {
+      toggle.setAttribute("aria-expanded", "true");
+      header.classList.add("is-mobile-open");
+      header.dataset.navOpen = "true";
+      overlay?.removeAttribute("hidden");
+      body.classList.add("nav-lock");
+    };
+
+    toggle.addEventListener("click", () => {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      if (expanded) {
+        closeNav();
+      } else {
+        openNav();
+      }
+    });
+
+    overlay?.addEventListener("click", () => closeNav());
+
+    navigation.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => closeNav());
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && header.classList.contains("is-mobile-open")) {
+        closeNav();
+        toggle.focus();
+      }
+    });
+
+    const desktopQuery = window.matchMedia("(min-width: 901px)");
+    const handleDesktopChange = (event) => {
+      if (event.matches) {
+        closeNav();
+      }
+    };
+
+    if (typeof desktopQuery.addEventListener === "function") {
+      desktopQuery.addEventListener("change", handleDesktopChange);
+    } else if (typeof desktopQuery.addListener === "function") {
+      desktopQuery.addListener(handleDesktopChange);
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     initTheme();
     init();
     initNavigation();
     initUserMenu();
+    initMobileNav();
   });
 })();

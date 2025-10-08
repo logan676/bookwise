@@ -1,8 +1,6 @@
 @model BookWise.Web.Models.Book
 @{
-    var coverUrl = string.IsNullOrWhiteSpace(Model.CoverImageUrl)
-        ? Url.Content("~/img/book-placeholder.svg")
-        : Model.CoverImageUrl!;
+    var coverUrl = Url.ResolveCoverImage(Model.CoverImageUrl);
     var statusKey = Model.Status?.ToLowerInvariant();
     var statusLabel = statusKey switch
     {

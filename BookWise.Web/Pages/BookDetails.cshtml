@@ -18,7 +18,7 @@
         <aside class="book-detail-sidebar">
             <div class="book-hero-card">
                 <div class="book-hero-cover">
-                    <img src="@book.DisplayCoverImageUrl"
+                    <img src="@Url.ResolveCoverImage(book.CoverImageUrl)"
                          alt="Cover of @book.Title"
                          loading="lazy" />
                 </div>

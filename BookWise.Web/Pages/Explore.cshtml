@@ -251,7 +251,7 @@
                                         {
                                             <article class="author-book-card" role="listitem">
                                                 <div class="author-book-cover">
-                                                    <img src="@book.CoverUrl"
+                                                    <img src="@Url.ResolveCoverImage(book.CoverUrl)"
                                                          alt="@book.Title cover"
                                                          loading="lazy" />
                                                 </div>
@@ -274,7 +274,7 @@
                                         {
                                             <article class="author-book-card" role="listitem">
                                                 <div class="author-book-cover">
-                                                    <img src="@book.CoverUrl"
+                                                    <img src="@Url.ResolveCoverImage(book.CoverUrl)"
                                                          alt="@book.Title cover"
                                                          loading="lazy" />
                                                 </div>
@@ -413,10 +413,16 @@
                     <h1 class="quotes-title">Daily inspiration curated for you</h1>
                 </header>
 
+                @{
+                    var quoteBackgroundStyle = string.IsNullOrEmpty(Model.QuoteOfTheDay.BackgroundImageUrl)
+                        ? null
+                        : $"background-image: url('{Url.ResolveCoverImage(Model.QuoteOfTheDay.BackgroundImageUrl)}')";
+                }
+
                 <section class="quote-feature">
                     <h2 class="quote-section-heading">Quote of the Day</h2>
                     <article class="quote-hero"
-                             style="@(string.IsNullOrEmpty(Model.QuoteOfTheDay.BackgroundImageUrl) ? null : $"background-image: url('{Model.QuoteOfTheDay.BackgroundImageUrl}')")">
+                             style="@quoteBackgroundStyle">
                         <div class="quote-hero-overlay">
                             <svg class="quote-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                                 <path d="M8.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 11.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 6 13.25V12a7 7 0 0 1 2.5-5.37V5zM17.5 5a3.5 3.5 0 1 1 0 7h-.25a.75.75 0 0 0-.75.75v.25A3.75 3.75 0 0 0 20.25 17h.25a.75.75 0 0 1 0 1.5h-.25A5.25 5.25 0 0 1 15 13.25V12a7 7 0 0 1 2.5-5.37V5z" fill="currentColor" />
@@ -457,7 +463,7 @@
                                 <summary class="quote-book-summary">
                                     <div class="quote-book-header">
                                         <div class="quote-book-cover">
-                                            <img src="@group.CoverImageUrl" alt="@group.BookTitle cover" loading="lazy" />
+                                            <img src="@Url.ResolveCoverImage(group.CoverImageUrl)" alt="@group.BookTitle cover" loading="lazy" />
                                         </div>
                                         <div class="quote-book-meta">
                                             <h3 class="quote-book-title">@group.BookTitle</h3>
@@ -546,7 +552,7 @@
                         {
                             <article class="recommendation-card recommendation-card--series">
                                 <div class="recommendation-card-media">
-                                    <img src="@series.CoverUrl" alt="@series.Title @series.Installment" loading="lazy" />
+                                    <img src="@Url.ResolveCoverImage(series.CoverUrl)" alt="@series.Title @series.Installment" loading="lazy" />
                                 </div>
                                 <div class="recommendation-card-body">
                                     <h3>@series.Title</h3>

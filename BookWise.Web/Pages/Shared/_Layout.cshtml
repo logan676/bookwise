@@ -44,7 +44,7 @@
         }
     }
     <div class="app-shell">
-        <header class="top-nav">
+        <header class="top-nav" data-nav-open="false">
             <div class="nav-left">
                 <a class="brand" asp-area="" asp-page="/Index">
                     <span class="sr-only">BookWise</span>
@@ -53,7 +53,15 @@
                     </span>
                     <span class="brand-name" aria-hidden="true">BookWise</span>
                 </a>
-                <nav class="nav-links" aria-label="Primary navigation">
+                <button type="button" class="nav-toggle" aria-expanded="false" aria-controls="primary-navigation">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="nav-toggle-icon" aria-hidden="true">
+                        <span class="nav-toggle-bar"></span>
+                        <span class="nav-toggle-bar"></span>
+                        <span class="nav-toggle-bar"></span>
+                    </span>
+                </button>
+                <nav id="primary-navigation" class="nav-links" aria-label="Primary navigation">
                     <a class="nav-link" asp-page="/Index">My Library</a>
                     <a class="nav-link" asp-page="/Explore">Discover Books</a>
                     <a class="nav-link" asp-page="/Statistics">Reading Insights</a>
@@ -78,7 +86,7 @@
                     </div>
                 </details>
             </div>
-
+            <div class="nav-overlay" data-nav-overlay hidden></div>
         </header>
         <main class="@mainClass" role="main">
             @RenderBody()
