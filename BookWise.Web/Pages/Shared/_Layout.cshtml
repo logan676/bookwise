@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="forest">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,7 +10,7 @@
             try {
                 var stored = localStorage.getItem('bookwise.theme');
                 var available = ['light', 'dark', 'system', 'forest', 'ocean', 'sunset', 'rose', 'lavender'];
-                var preference = available.indexOf(stored) !== -1 ? stored : 'system';
+                var preference = available.indexOf(stored) !== -1 ? stored : 'forest';
                 var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
                 var resolved;
 

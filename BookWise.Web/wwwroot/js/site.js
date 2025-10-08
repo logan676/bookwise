@@ -41,7 +41,7 @@
 
   const themeConfig = {
     storageKey: "bookwise.theme",
-    defaultPreference: "system",
+    defaultPreference: "forest",
     availablePreferences: [
       "light",
       "dark",
